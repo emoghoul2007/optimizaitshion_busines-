@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Робот LP-CRM",
-  "version": "2.1",
+  "version": "2.2",
   "description": "Стирает ТТН у заказов в выбранном статусе и создаёт заказы с ТТН из листа «Заказы на СРМ». Работает только на сайтах *.lp-crm.biz.",
   "host_permissions": ["https://script.google.com/*", "https://script.googleusercontent.com/*"],
   "background": { "service_worker": "background.js" },
