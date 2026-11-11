@@ -163,8 +163,8 @@
       var ttn = (digits(tr.cells[5].textContent).match(/^\d{14}$/) || [''])[0];
       var cl = tr.cells[6].innerHTML.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       var ph = (cl.match(/\d{10,12}\s*$/) || [''])[0].trim();
-      if (/Скасовано|Отменен/i.test(tr.cells[2].textContent)) return;
-      if (ttn && ph) list.push({ ttn: ttn, phone: phone380(ph), name: cl.replace(/\d{10,12}\s*$/, '').trim(), day: day, crmId: '', src: 'Aveopt №' + tr.cells[0].textContent.trim() });
+      var cancel = /Скасовано|Отменен/i.test(tr.cells[2].textContent);
+      if (ttn && ph) list.push({ ttn: ttn, phone: phone380(ph), name: cl.replace(/\d{10,12}\s*$/, '').trim(), day: day, crmId: '', cancel: cancel, src: 'Aveopt №' + tr.cells[0].textContent.trim() + (cancel ? ', скасовано' : '') });
     });
     return { ok: true, list: list, minDay: minDay, rows: rowsN };
   }
@@ -219,31 +219,17 @@
     var list = [];
     rowsX.slice(hi + 1).forEach(function (r) {
       var ttn = digits(r[H['ТТН']]); if (!/^\d{14}$/.test(ttn)) return;
-      if (/Скасован|Відмінен/i.test(String(r[H['Статус']] || ''))) return;
-      list.push({ ttn: ttn, phone: phone380(r[H['Номер телефону']]), name: String(r[H['Отримувач']] || '').trim(), day: dayNum(r[H['Дата і час']]), crmId: digits(r[H['ID в CRM']]), src: 'Opt-Drop №' + String(r[H['ІD']] || r[0] || '') });
+      var cancel = /Скасован|Відмінен/i.test(String(r[H['Статус']] || ''));
+      list.push({ cancel: cancel, ttn: ttn, phone: phone380(r[H['Номер телефону']]), name: String(r[H['Отримувач']] || '').trim(), day: dayNum(r[H['Дата і час']]), crmId: digits(r[H['ID в CRM']]), src: 'Opt-Drop №' + String(r[H['ІD']] || r[0] || '') + (cancel ? ', скасовано' : '') });
     });
     return list;
   }
-  /** Заказы статуса без ТТН (с прокруткой списка). */
-  async function collectNoTtn() {
-    var found = {}, order = [], idle = 0, lastCount = -1;
-    for (var step = 0; step < 300 && idle < 3; step++) {
-      var rs = rows();
-      rs.forEach(function (r) {
-        if (found[r.id]) return;
-        found[r.id] = true;
-        var info = (r.dataset.info || (r.id + '|' + (r.dataset.orderid || ''))).split('|');
-        if (!digits(r.dataset.ttn)) order.push({ info: info, phone: phone380(r.dataset.phone), orderid: digits(r.dataset.orderid || info[1]), name: r.dataset.buyer || '', day: dayNum(info[2]) });
-      });
-      var n = Object.keys(found).length;
-      if (n === lastCount) idle++; else idle = 0;
-      lastCount = n;
-      if (rs.length) rs[rs.length - 1].scrollIntoView({ block: 'end' });
-      window.scrollTo(0, document.documentElement.scrollHeight);
-      await sleep(450);
-    }
-    window.scrollTo(0, 0);
-    return order;
+  /** Заказы статуса без ТТН. */
+  function collectNoTtn() {
+    return collectRows(function (r) {
+      var info = (r.dataset.info || (r.id + '|' + (r.dataset.orderid || ''))).split('|');
+      return digits(r.dataset.ttn) ? null : { info: info, phone: phone380(r.dataset.phone), orderid: digits(r.dataset.orderid || info[1]), name: r.dataset.buyer || '', day: dayNum(info[2]) };
+    }, 'Ищу заказы без ТТН');
   }
   /**
    * Сопоставление: сначала по «ID в CRM» (Opt-Drop), потом по телефону. Если на телефон несколько заказов дропа с разными ТТН,
@@ -257,6 +243,8 @@
       if (!d) {
         var c = (byPhone[o.phone] || []).filter(function (x) { return !usedTtn[x.ttn]; });
         var uniq = c.filter(function (x, i) { return c.findIndex(function (y) { return y.ttn === x.ttn; }) === i; });
+        var live = uniq.filter(function (x) { return !x.cancel; });
+        if (live.length) uniq = live;   // отменённые у дропа берём, только если других ТТН на этот телефон нет
         if (uniq.length === 1) d = uniq[0];
         else if (uniq.length > 1) {
           var later = uniq.filter(function (x) { return x.day && o.day && x.day >= o.day; }).sort(function (a, b) { return a.day - b.day; });
@@ -287,25 +275,68 @@
   }
 
   // ---------------------------------------------------------------- 1. стереть ТТН в статусе
-  /** Собирает заказы с ТТН на странице (с прокруткой, если список длинный). */
-  async function collectWithTtn() {
-    var found = {}, order = [], idle = 0, lastCount = -1;
-    for (var step = 0; step < 200 && idle < 3; step++) {
+  /** Сколько заказов в текущем статусе по счётчику на вкладке статуса (0, если не видно). */
+  function expectedCount() {
+    var t = document.querySelector('#tab-status-' + curStatus());
+    var sp = t && t.querySelector('span');
+    return sp ? parseInt(digits(sp.textContent), 10) || 0 : 0;
+  }
+  var lastScan = { got: 0, expected: 0 };
+  /**
+   * Проходит весь список статуса: CRM подгружает строки порциями при прокрутке, поэтому крутим список вниз (и немного
+   * назад-вперёд), пока не соберём столько строк, сколько показывает счётчик статуса, или пока список не перестанет расти.
+   * pick(row) возвращает объект заказа или null.
+   */
+  async function collectRows(pick, title) {
+    var found = {}, order = [], idle = 0, lastCount = -1, expected = expectedCount();
+    var maxIdle = expected ? 30 : 8;
+    function scrollers(el) {
+      var out = [];
+      for (; el && el !== document.documentElement; el = el.parentElement) {
+        var oy = getComputedStyle(el).overflowY;
+        if (el.scrollHeight > el.clientHeight + 5 && /auto|scroll|overlay/.test(oy)) out.push(el);
+      }
+      return out;
+    }
+    for (var step = 0; step < 900 && idle < maxIdle; step++) {
+      if (stopFlag) break;
       var rs = rows();
       rs.forEach(function (r) {
         if (found[r.id]) return;
         found[r.id] = true;
-        if (digits(r.dataset.ttn)) order.push({ info: (r.dataset.info || (r.id + '|' + (r.dataset.orderid || ''))).split('|'), ttn: digits(r.dataset.ttn), name: r.dataset.buyer || '' });
+        var o = pick(r); if (o) order.push(o);
       });
       var n = Object.keys(found).length;
       if (n === lastCount) idle++; else idle = 0;
       lastCount = n;
-      if (rs.length) rs[rs.length - 1].scrollIntoView({ block: 'end' });
-      window.scrollTo(0, document.documentElement.scrollHeight);
-      await sleep(450);
+      progress(title, 0, 0, 'просмотрено заказов: ' + n + (expected ? ' из ' + expected : ''));
+      if (expected && n >= expected) break;
+      var last = rs[rs.length - 1], back = idle > 0 && idle % 4 === 0;   // если застряли - чуть назад, потом снова вниз
+      if (last) {
+        last.scrollIntoView({ block: back ? 'center' : 'end' });
+        scrollers(last).forEach(function (c) {
+          c.scrollTop = back ? Math.max(0, c.scrollHeight - c.clientHeight * 2) : c.scrollHeight;
+          c.dispatchEvent(new Event('scroll', { bubbles: true }));
+          try { c.dispatchEvent(new WheelEvent('wheel', { deltaY: back ? -600 : 1200, bubbles: true, cancelable: true })); } catch (e) {}
+        });
+      }
+      window.scrollTo(0, back ? Math.max(0, document.documentElement.scrollHeight - window.innerHeight * 2) : document.documentElement.scrollHeight);
+      window.dispatchEvent(new Event('scroll'));
+      await sleep(500);
     }
     window.scrollTo(0, 0);
+    lastScan = { got: Object.keys(found).length, expected: expected };
     return order;
+  }
+  function scanNote() {
+    return lastScan.expected && lastScan.got < lastScan.expected
+      ? '<div class="card err">CRM показала только ' + lastScan.got + ' из ' + lastScan.expected + ' заказов статуса. Покрутите список колёсиком до конца и нажмите кнопку ещё раз.</div>' : '';
+  }
+  /** Заказы статуса с ТТН. */
+  function collectWithTtn() {
+    return collectRows(function (r) {
+      return digits(r.dataset.ttn) ? { info: (r.dataset.info || (r.id + '|' + (r.dataset.orderid || ''))).split('|'), ttn: digits(r.dataset.ttn), name: r.dataset.buyer || '' } : null;
+    }, 'Ищу заказы с ТТН');
   }
   async function runClear(list, limit) {
     var ok = 0, errs = [];
@@ -481,12 +512,13 @@
     '#lpr-btn:hover,#lpr-btn.on{background:#5fd49a}' +
     '#lpr-btn.float{position:fixed;top:8px;right:210px;z-index:2147483000}' +
     '#lpr,#lpr *{box-sizing:border-box;font-family:Roboto,Arial,sans-serif;text-transform:none;letter-spacing:0}' +
-    '#lpr{position:fixed;z-index:2147483000;width:440px;max-height:calc(100vh - 70px);overflow:auto;background:#fff6e0;color:#2a2d43;font-size:14px;line-height:1.35;display:none;box-shadow:0 -4px 0 0 #2a2d43,0 4px 0 0 #2a2d43,-4px 0 0 0 #2a2d43,4px 0 0 0 #2a2d43,10px 10px 0 0 rgba(42,45,67,.25)}' +
+    '#lpr{position:fixed;z-index:2147483000;width:480px;max-height:calc(100vh - 70px);overflow:auto;background:#fff6e0;color:#2a2d43;font-size:14px;line-height:1.35;display:none;box-shadow:0 -4px 0 0 #2a2d43,0 4px 0 0 #2a2d43,-4px 0 0 0 #2a2d43,4px 0 0 0 #2a2d43,10px 10px 0 0 rgba(42,45,67,.25)}' +
     '#lpr::-webkit-scrollbar{width:10px}#lpr::-webkit-scrollbar-track{background:#f1e6c8}#lpr::-webkit-scrollbar-thumb{background:#2a2d43}' +
     '#lpr .hd{display:flex;align-items:center;gap:12px;padding:16px 18px 12px;font-family:' + PX + ';font-size:12px;color:#2a2d43}#lpr .hd span{font-family:' + PX + '}#lpr .hd svg{color:#ffb300;flex:none}' +
-    '#lpr .hd .x{margin-left:auto;border:0;background:#ff8a7a;color:#2a2d43;width:24px;height:24px;font-size:16px;font-weight:700;line-height:24px;padding:0;cursor:pointer;box-shadow:0 -2px 0 0 #2a2d43,0 2px 0 0 #2a2d43,-2px 0 0 0 #2a2d43,2px 0 0 0 #2a2d43}#lpr .hd .x:active{transform:translate(2px,2px)}' +
-    '#lpr .tabs{display:flex;gap:10px;margin:0 18px;padding:0}' +
-    '#lpr .tabs button{flex:1;border:0;background:#fff;color:#6b7089;padding:10px 2px;font-family:' + PX + ';font-size:8px;cursor:pointer;box-shadow:0 -3px 0 0 #2a2d43,0 3px 0 0 #2a2d43,-3px 0 0 0 #2a2d43,3px 0 0 0 #2a2d43;line-height:1.4}' +
+    '#lpr button,#lpr input,#lpr select{border-radius:0 !important;min-width:0;text-shadow:none}' +
+    '#lpr .hd .x{margin-left:auto;flex:none;border:0;background:#ff8a7a;color:#2a2d43;width:24px;height:24px;font-size:16px;font-weight:700;line-height:24px;padding:0;cursor:pointer;box-shadow:0 -2px 0 0 #2a2d43,0 2px 0 0 #2a2d43,-2px 0 0 0 #2a2d43,2px 0 0 0 #2a2d43}#lpr .hd .x:active{transform:translate(2px,2px)}' +
+    '#lpr .tabs{display:flex;gap:9px;margin:0 21px;padding:0}' +
+    '#lpr .tabs button{flex:1 1 0;white-space:nowrap;overflow:hidden;height:auto;border:0;background:#fff;color:#6b7089;padding:10px 2px;font-family:' + PX + ';font-size:8px;cursor:pointer;box-shadow:0 -3px 0 0 #2a2d43,0 3px 0 0 #2a2d43,-3px 0 0 0 #2a2d43,3px 0 0 0 #2a2d43;line-height:1.4}' +
     '#lpr .tabs button:hover{color:#2a2d43}#lpr .tabs button.on{background:#6cb8ff;color:#2a2d43}' +
     '#lpr .pane{padding:16px 18px 18px;display:none}#lpr .pane.on{display:block}' +
     '#lpr p{margin:0 0 12px;color:#555a75}#lpr label{display:block;font-size:13px;font-weight:700;color:#2a2d43;margin:0 0 6px}' +
@@ -622,8 +654,8 @@
     setBusy(false); showTab('clear');
     var limit = lim('#lpr-limit-d'), n = limit > 0 ? Math.min(limit, list.length) : list.length;
     var name = (statusOptions().filter(function (s) { return s.id === curStatus(); })[0] || {}).name || curStatus();
-    if (!list.length) { out('clear', '<div class="card ok">В статусе «' + esc(name) + '» нет заказов с ТТН.</div>'); return; }
-    out('clear', '<div class="card warn"><div class="big">' + list.length + '</div>заказов с ТТН в статусе «' + esc(name) + '».<br>ТТН будет стёрта у <b>' + n + '</b>. Отменить это нельзя.</div>' +
+    if (!list.length) { out('clear', scanNote() + '<div class="card ok">В статусе «' + esc(name) + '» нет заказов с ТТН.</div>'); return; }
+    out('clear', scanNote() + '<div class="card warn"><div class="big">' + list.length + '</div>заказов с ТТН в статусе «' + esc(name) + '».<br>ТТН будет стёрта у <b>' + n + '</b>. Отменить это нельзя.</div>' +
       '<button class="btn b3" id="lpr-go" type="button">Стереть ТТН</button><button class="btn b2" id="lpr-no" type="button">Отмена</button>');
     panel.querySelector('#lpr-no').onclick = function () { out('clear', ''); };
     panel.querySelector('#lpr-go').onclick = async function () {
@@ -660,7 +692,8 @@
     var crm = await collectNoTtn(), drop = [], note = '';
     var name = (statusOptions().filter(function (s) { return s.id === curStatus(); })[0] || {}).name || curStatus();
     function fin(html) { setBusy(false); showTab('drop'); out('drop', html); }
-    if (!crm.length) return fin('<div class="card ok">В статусе «' + esc(name) + '» нет заказов без ТТН.</div>');
+    var sn = scanNote();
+    if (!crm.length) return fin(sn + '<div class="card ok">В статусе «' + esc(name) + '» нет заказов без ТТН.</div>');
     if (src === 'optdrop') {
       try { drop = JSON.parse(localStorage.getItem(DROP_KEY) || '[]'); } catch (e) {}
       if (!drop.length) return fin('<div class="card err">Файл Opt-Drop не загружен: выберите его и нажмите «Найти ТТН» ещё раз.</div>');
@@ -668,7 +701,8 @@
       // листаем Aveopt, пока не найдём ТТН для всех заказов или не уйдём раньше самого старого заказа CRM
       var oldest = crm.reduce(function (m, o) { return o.day && (!m || o.day < m) ? o.day : m; }, 0), need = {};
       crm.forEach(function (o) { need[o.phone] = true; });
-      for (var p = 1; p <= 60 && !stopFlag; p++) {
+      var past = 0;
+      for (var p = 1; p <= 150 && !stopFlag; p++) {
         progress('Читаю заказы Aveopt', 0, 0, 'страница ' + p + ', найдено ТТН: ' + drop.length);
         var r = await aveoptPage(p);
         if (!r.ok) return fin('<div class="card err">Aveopt: ' + esc(r.error || 'ошибка') + '</div>');
@@ -676,16 +710,17 @@
         if (!pg.ok) return fin('<div class="card err">Не вижу списка заказов Aveopt. Войдите на aveopt.com.ua в этом браузере и повторите.</div>');
         drop = drop.concat(pg.list);
         pg.list.forEach(function (d) { delete need[d.phone]; });
-        if (!pg.rows || !Object.keys(need).length || (oldest && pg.minDay && pg.minDay < oldest)) break;
+        if (!pg.rows || !Object.keys(need).length) break;
+        if (oldest && pg.minDay && pg.minDay < oldest) { if (++past >= 2) break; }   // ещё одна страница с запасом и хватит
         await sleep(300);
       }
-      note = 'Прочитано заказов Aveopt с ТТН: ' + drop.length + '.';
+      note = 'Прочитано заказов Aveopt с ТТН: ' + drop.length + ' (страниц: ' + p + ').';
     }
     var m = matchDrop(crm, drop), limit = lim('#lpr-limit-t'), n = limit > 0 ? Math.min(limit, m.pairs.length) : m.pairs.length;
     var missHtml = m.miss.length ? '<div class="card warn"><b>Без ТТН останутся: ' + m.miss.length + '</b><div class="list">' +
       m.miss.map(function (x) { return '<div>' + esc(x.o.name) + ' · ' + esc(x.o.phone) + ': ' + esc(x.why) + '</div>'; }).join('') + '</div></div>' : '';
-    if (!m.pairs.length) return fin('<div class="card warn">Заказов без ТТН в «' + esc(name) + '»: <b>' + crm.length + '</b>, но ТТН для них у дропа пока нет. ' + esc(note) + '</div>' + missHtml);
-    fin('<div class="card ok"><div class="big">' + m.pairs.length + ' из ' + crm.length + '</div>заказов без ТТН в «' + esc(name) + '» получат ТТН. ' + esc(note) + '<br>Будет вписано: <b>' + n + '</b>' +
+    if (!m.pairs.length) return fin(sn + '<div class="card warn">Заказов без ТТН в «' + esc(name) + '»: <b>' + crm.length + '</b>, но ТТН для них у дропа пока нет. ' + esc(note) + '</div>' + missHtml);
+    fin(sn + '<div class="card ok"><div class="big">' + m.pairs.length + ' из ' + crm.length + '</div>заказов без ТТН в «' + esc(name) + '» получат ТТН. ' + esc(note) + '<br>Будет вписано: <b>' + n + '</b>' +
       '<div class="list">' + m.pairs.slice(0, 200).map(function (x) { return '<div>' + esc(x.o.name) + ' · ' + esc(x.o.phone) + ' → ' + x.d.ttn + ' (' + esc(x.d.src) + ')</div>'; }).join('') + '</div></div>' + missHtml +
       '<button class="btn b4" id="lpr-dgo" type="button">Вписать ТТН</button><button class="btn b2" id="lpr-dno" type="button">Отмена</button>');
     panel.querySelector('#lpr-dno').onclick = function () { out('drop', ''); };

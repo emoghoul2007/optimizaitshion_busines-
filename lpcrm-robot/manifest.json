@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Робот LP-CRM",
-  "version": "2.3",
+  "version": "2.4",
   "description": "Стирает ТТН у заказов в выбранном статусе создаёт заказы с ТТН из листа «Заказы на СРМ» и вписывает ТТН дроп-платформ (Aveopt, Opt-Drop). Работает только на сайтах *.lp-crm.biz.",
   "host_permissions": ["https://script.google.com/*", "https://script.googleusercontent.com/*", "https://www.aveopt.com.ua/*"],
   "background": { "service_worker": "background.js" },
