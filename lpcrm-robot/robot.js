@@ -136,6 +136,156 @@
     return res;
   }
 
+  /** Страница заказов Aveopt под входом пользователя (запрос делает фоновая часть расширения). */
+  function aveoptPage(n) {
+    return new Promise(function (resolve) {
+      var id = ++seq; pending[id] = resolve;
+      window.postMessage({ __lprobot: 'req', id: id, kind: 'aveopt', page: n }, location.origin);
+      setTimeout(function () { if (pending[id]) { delete pending[id]; resolve({ ok: false, error: 'Aveopt не ответил за 40 секунд' }); } }, 40000);
+    });
+  }
+
+  // ---------------------------------------------------------------- 3. ТТН от дроп-платформ
+  function phone380(p) { var d = digits(p); if (d.length === 10 && d[0] === '0') d = '38' + d; else if (d.length === 9) d = '380' + d; return d; }
+  function dayNum(s) {   // «11.11.2026 12:05» или «2026-11-11 09:12:32» -> 20261111
+    var m = String(s || '').match(/(\d{2})\.(\d{2})\.(\d{4})/); if (m) return +(m[3] + m[2] + m[1]);
+    m = String(s || '').match(/(\d{4})-(\d{2})-(\d{2})/); return m ? +(m[1] + m[2] + m[3]) : 0;
+  }
+  /** Заказы со страницы Aveopt: [{ttn, phone, name, day, crmId:'', src}] и самый старый день на странице. */
+  function parseAveopt(html) {
+    var doc = new DOMParser().parseFromString(html, 'text/html'), list = [], minDay = 0, rowsN = 0;
+    var head = Array.prototype.slice.call(doc.querySelectorAll('table tr')).filter(function (tr) { return /Номер ТТН/.test(tr.textContent) && /Клієнт|Клиент/.test(tr.textContent); })[0];
+    if (!head) return { ok: false };
+    Array.prototype.forEach.call(head.parentNode.parentNode.querySelectorAll('tr'), function (tr) {
+      if (tr === head || tr.cells.length < 7) return;
+      rowsN++;
+      var day = dayNum(tr.cells[1].textContent); if (day && (!minDay || day < minDay)) minDay = day;
+      var ttn = (digits(tr.cells[5].textContent).match(/^\d{14}$/) || [''])[0];
+      var cl = tr.cells[6].innerHTML.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      var ph = (cl.match(/\d{10,12}\s*$/) || [''])[0].trim();
+      if (/Скасовано|Отменен/i.test(tr.cells[2].textContent)) return;
+      if (ttn && ph) list.push({ ttn: ttn, phone: phone380(ph), name: cl.replace(/\d{10,12}\s*$/, '').trim(), day: day, crmId: '', src: 'Aveopt №' + tr.cells[0].textContent.trim() });
+    });
+    return { ok: true, list: list, minDay: minDay, rows: rowsN };
+  }
+  /** Минимальное чтение .xlsx (zip + xml) без сторонних библиотек: массив строк первого листа. */
+  async function readXlsx(buf) {
+    var dv = new DataView(buf), u8 = new Uint8Array(buf), td = new TextDecoder('utf-8'), i = buf.byteLength - 22;
+    while (i >= 0 && dv.getUint32(i, true) !== 0x06054b50) i--;
+    if (i < 0) throw new Error('это не файл .xlsx');
+    var n = dv.getUint16(i + 10, true), off = dv.getUint32(i + 16, true), files = {};
+    for (var k = 0; k < n; k++) {
+      var method = dv.getUint16(off + 10, true), csize = dv.getUint32(off + 20, true), nl = dv.getUint16(off + 28, true), el = dv.getUint16(off + 30, true), cl = dv.getUint16(off + 32, true), lo = dv.getUint32(off + 42, true);
+      files[td.decode(u8.subarray(off + 46, off + 46 + nl))] = { method: method, csize: csize, lo: lo };
+      off += 46 + nl + el + cl;
+    }
+    async function text(name) {
+      var f = files[name]; if (!f) return '';
+      var st = f.lo + 30 + dv.getUint16(f.lo + 26, true) + dv.getUint16(f.lo + 28, true), raw = u8.subarray(st, st + f.csize);
+      if (f.method === 0) return td.decode(raw);
+      var ds = new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return await new Response(ds).text();
+    }
+    function xml(t) { return new DOMParser().parseFromString(t, 'application/xml'); }
+    var shared = [];
+    var ss = await text('xl/sharedStrings.xml');
+    if (ss) Array.prototype.forEach.call(xml(ss).getElementsByTagName('si'), function (si) {
+      shared.push(Array.prototype.map.call(si.getElementsByTagName('t'), function (t) { return t.textContent; }).join(''));
+    });
+    var sheetName = Object.keys(files).filter(function (f) { return /^xl\/worksheets\/sheet\d*\.xml$/.test(f); }).sort()[0];
+    if (!sheetName) throw new Error('в файле нет листа');
+    var out = [];
+    Array.prototype.forEach.call(xml(await text(sheetName)).getElementsByTagName('row'), function (row) {
+      var r = [];
+      Array.prototype.forEach.call(row.getElementsByTagName('c'), function (c) {
+        var col = 0, ref = (c.getAttribute('r') || '').replace(/\d+/g, '');
+        for (var j = 0; j < ref.length; j++) col = col * 26 + ref.charCodeAt(j) - 64;
+        var t = c.getAttribute('t'), v = c.getElementsByTagName('v')[0], val = '';
+        if (t === 's') val = shared[+(v ? v.textContent : -1)] || '';
+        else if (t === 'inlineStr') val = Array.prototype.map.call(c.getElementsByTagName('t'), function (x) { return x.textContent; }).join('');
+        else if (v) { val = v.textContent; if (/^-?\d+(\.\d+)?E\+?\d+$/i.test(val)) val = Number(val).toFixed(0); }
+        r[col - 1] = val;
+      });
+      out.push(r);
+    });
+    return out;
+  }
+  /** Строки файла Opt-Drop -> [{ttn, phone, name, day, crmId, src}] */
+  function parseOptDrop(rowsX) {
+    var hi = -1, H = {};
+    for (var i = 0; i < Math.min(rowsX.length, 10) && hi < 0; i++) if (rowsX[i].indexOf('ТТН') >= 0 && rowsX[i].indexOf('Номер телефону') >= 0) hi = i;
+    if (hi < 0) throw new Error('не нашёл в файле колонки «ТТН» и «Номер телефону»');
+    rowsX[hi].forEach(function (h, c) { if (h) H[h] = c; });
+    var list = [];
+    rowsX.slice(hi + 1).forEach(function (r) {
+      var ttn = digits(r[H['ТТН']]); if (!/^\d{14}$/.test(ttn)) return;
+      if (/Скасован|Відмінен/i.test(String(r[H['Статус']] || ''))) return;
+      list.push({ ttn: ttn, phone: phone380(r[H['Номер телефону']]), name: String(r[H['Отримувач']] || '').trim(), day: dayNum(r[H['Дата і час']]), crmId: digits(r[H['ID в CRM']]), src: 'Opt-Drop №' + String(r[H['ІD']] || r[0] || '') });
+    });
+    return list;
+  }
+  /** Заказы статуса без ТТН (с прокруткой списка). */
+  async function collectNoTtn() {
+    var found = {}, order = [], idle = 0, lastCount = -1;
+    for (var step = 0; step < 300 && idle < 3; step++) {
+      var rs = rows();
+      rs.forEach(function (r) {
+        if (found[r.id]) return;
+        found[r.id] = true;
+        var info = (r.dataset.info || (r.id + '|' + (r.dataset.orderid || ''))).split('|');
+        if (!digits(r.dataset.ttn)) order.push({ info: info, phone: phone380(r.dataset.phone), orderid: digits(r.dataset.orderid || info[1]), name: r.dataset.buyer || '', day: dayNum(info[2]) });
+      });
+      var n = Object.keys(found).length;
+      if (n === lastCount) idle++; else idle = 0;
+      lastCount = n;
+      if (rs.length) rs[rs.length - 1].scrollIntoView({ block: 'end' });
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      await sleep(450);
+    }
+    window.scrollTo(0, 0);
+    return order;
+  }
+  /**
+   * Сопоставление: сначала по «ID в CRM» (Opt-Drop), потом по телефону. Если на телефон несколько заказов дропа с разными ТТН,
+   * берётся ближайший по дате не раньше заказа в CRM; если так не выбрать - заказ пропускается.
+   */
+  function matchDrop(crm, drop) {
+    var byId = {}, byPhone = {}, usedTtn = {}, pairs = [], miss = [];
+    drop.forEach(function (d) { if (d.crmId) byId[d.crmId] = d; if (d.phone) (byPhone[d.phone] = byPhone[d.phone] || []).push(d); });
+    crm.forEach(function (o) {
+      var d = o.orderid && byId[o.orderid], why = '';
+      if (!d) {
+        var c = (byPhone[o.phone] || []).filter(function (x) { return !usedTtn[x.ttn]; });
+        var uniq = c.filter(function (x, i) { return c.findIndex(function (y) { return y.ttn === x.ttn; }) === i; });
+        if (uniq.length === 1) d = uniq[0];
+        else if (uniq.length > 1) {
+          var later = uniq.filter(function (x) { return x.day && o.day && x.day >= o.day; }).sort(function (a, b) { return a.day - b.day; });
+          if (later.length && (later.length === 1 || later[0].day < later[1].day)) d = later[0]; else why = 'на этот телефон несколько ТТН у дропа: ' + uniq.map(function (x) { return x.ttn; }).join(', ');
+        } else why = 'у дропа нет ТТН на этот телефон';
+      }
+      if (d) { usedTtn[d.ttn] = true; pairs.push({ o: o, d: d }); } else miss.push({ o: o, why: why });
+    });
+    return { pairs: pairs, miss: miss };
+  }
+  async function runDrop(pairs, limit) {
+    var ok = 0, errs = [], todo = limit > 0 ? pairs.slice(0, limit) : pairs;
+    for (var i = 0; i < todo.length; i++) {
+      if (stopFlag) break;
+      var p = todo[i];
+      progress('Вписываю ТТН', i + 1, todo.length, 'заказ ' + p.o.info[0] + ' · ' + p.d.ttn);
+      var e = await editOrder(p.o.info, function (c) {
+        var t = c.querySelector('#ttn'), ref = c.querySelector('#ttn_ref');
+        if (!t) return 'нет поля ТТН';
+        if (digits(t.value)) return 'в заказе уже есть ТТН ' + digits(t.value);
+        setField(t, p.d.ttn);
+        if (ref) ref.value = '';
+        return '';
+      });
+      if (e) errs.push('заказ ' + p.o.info[0] + ' (' + p.o.name + '): ' + e); else ok++;
+    }
+    return { ok: ok, errs: errs, total: todo.length, stopped: stopFlag };
+  }
+
   // ---------------------------------------------------------------- 1. стереть ТТН в статусе
   /** Собирает заказы с ТТН на странице (с прокруткой, если список длинный). */
   async function collectWithTtn() {
@@ -393,7 +543,7 @@
     panel.innerHTML =
       '<div class="hd">' + ICON + '<span>Робот LP-CRM</span><button class="x" type="button" title="Закрыть">×</button></div>' +
       '<div class="prog"><b class="t"></b><div class="mut w"></div><div class="bar"><i></i></div><button class="btn b3" id="lpr-stop" type="button">Остановить</button><div class="mut" style="margin-top:8px">Не переключайте вкладку, пока робот работает.</div></div>' +
-      '<div class="body"><div class="tabs"><button type="button" data-tab="create" class="on">Создать заказы</button><button type="button" data-tab="clear">Стереть ТТН</button><button type="button" data-tab="sheet">Настройки</button></div>' +
+      '<div class="body"><div class="tabs"><button type="button" data-tab="create" class="on">Создать</button><button type="button" data-tab="clear">Стереть ТТН</button><button type="button" data-tab="drop">ТТН дропа</button><button type="button" data-tab="sheet">Настройки</button></div>' +
       '<div class="pane on" data-tab="create"><p>Берёт заказы с листа «Заказы на СРМ», создаёт их в статусе «Импорт» с ТТН и оплатой «Післяплата». Результат сам записывает в колонку «Статус».</p>' +
       '<div class="row"><div class="sm"><label>Не больше (0 = все)</label><input type="number" id="lpr-limit-c" value="0" min="0"></div><div><button class="btn b1" id="lpr-load" type="button" style="margin-bottom:10px">Загрузить из таблицы</button></div></div>' +
       '<div class="out" id="lpr-out-create"></div></div>' +
@@ -401,6 +551,12 @@
       '<label>Статус</label><select id="lpr-status">' + sel + '</select>' +
       '<div class="row"><div class="sm"><label>Не больше (0 = все)</label><input type="number" id="lpr-limit-d" value="0" min="0"></div><div><button class="btn b1" id="lpr-clear" type="button" style="margin-bottom:10px">Найти заказы с ТТН</button></div></div>' +
       '<div class="out" id="lpr-out-clear"></div></div>' +
+      '<div class="pane" data-tab="drop"><p>Берёт ТТН у дроп-платформы и вписывает их в заказы выбранного статуса, у которых ТТН пустая. Заказы сопоставляются по ID в CRM и телефону.</p>' +
+      '<label>Статус в CRM</label><select id="lpr-dstatus">' + sel + '</select>' +
+      '<label>Откуда брать ТТН</label><select id="lpr-dsrc"><option value="aveopt">Aveopt - сайт (нужен вход на aveopt.com.ua в этом браузере)</option><option value="optdrop">Opt-Drop - файл Excel с заказами</option></select>' +
+      '<div id="lpr-dfile-w" style="display:none"><label>Файл .xlsx из Opt-Drop</label><input type="file" id="lpr-dfile" accept=".xlsx"></div>' +
+      '<div class="row"><div class="sm"><label>Не больше (0 = все)</label><input type="number" id="lpr-limit-t" value="0" min="0"></div><div><button class="btn b1" id="lpr-drop" type="button" style="margin-bottom:10px">Найти ТТН</button></div></div>' +
+      '<div class="out" id="lpr-out-drop"></div></div>' +
       '<div class="pane" data-tab="sheet"><p>1) Адрес: в редакторе скрипта «Развернуть» → «Управление развертываниями» → «Копировать» у блока «Веб-приложение».<br>2) Код: в таблице меню «Заявки» → «Ссылка для расширения».</p>' +
       '<label>Адрес веб-приложения (…/exec)</label><input type="text" id="lpr-url" placeholder="https://script.google.com/macros/s/.../exec">' +
       '<label>Код доступа</label><input type="password" id="lpr-tok" placeholder="код из таблицы">' +
@@ -423,6 +579,15 @@
     Array.prototype.forEach.call(panel.querySelectorAll('.tabs button'), function (b) { b.onclick = function () { showTab(b.dataset.tab); }; });
     panel.querySelector('#lpr-stop').onclick = function () { stopFlag = true; progEl.querySelector('.w').textContent = 'Останавливаюсь после текущего заказа...'; };
     panel.querySelector('#lpr-clear').onclick = startClear;
+    panel.querySelector('#lpr-drop').onclick = startDrop;
+    (function () {
+      var st = panel.querySelector('#lpr-dstatus'), src = panel.querySelector('#lpr-dsrc'), fw = panel.querySelector('#lpr-dfile-w');
+      function sync() { fw.style.display = src.value === 'optdrop' ? 'block' : 'none'; }
+      // по названию статуса подставляем источник: «АВЕ ОПТ» - Aveopt, «ОПТ ДРОП» - файл Opt-Drop
+      function byStatus() { var nm = (st.options[st.selectedIndex] || {}).text || ''; src.value = /аве/i.test(nm) ? 'aveopt' : /дроп/i.test(nm) ? 'optdrop' : src.value; sync(); }
+      Array.prototype.forEach.call(st.options, function (o) { if (/аве\s*опт/i.test(o.text)) st.value = o.value; });
+      st.onchange = byStatus; src.onchange = sync; byStatus();
+    })();
     panel.querySelector('#lpr-load').onclick = function () { loadCreate(false); };
     panel.querySelector('#lpr-saveurl').onclick = saveUrl;
     if (!sheetUrl()) showTab('sheet');
@@ -468,6 +633,68 @@
       out('clear', '<div class="card ' + (r.errs.length ? 'warn' : 'ok') + '"><div class="big">' + r.ok + ' из ' + r.total + '</div>ТТН стёрта' + (r.stopped ? ' (остановлено)' : '') +
         (list.length > r.total ? '<br>Осталось с ТТН: ' + (list.length - r.total) : '') + '</div>' +
         (r.errs.length ? '<div class="card err"><b>Ошибки</b><div class="list">' + r.errs.map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div></div>' : ''));
+    };
+  }
+
+  // --- 3
+  var DROP_KEY = 'lprobot_drop';
+  async function startDrop() {
+    var id = panel.querySelector('#lpr-dstatus').value, src = panel.querySelector('#lpr-dsrc').value, limit = lim('#lpr-limit-t');
+    try { localStorage.removeItem(DROP_KEY); } catch (e) {}
+    if (src === 'optdrop') {
+      var f = panel.querySelector('#lpr-dfile').files[0];
+      if (!f) { out('drop', '<div class="card err">Выберите файл .xlsx, скачанный из Opt-Drop.</div>'); return; }
+      try {
+        var list = parseOptDrop(await readXlsx(await f.arrayBuffer()));
+        if (!list.length) { out('drop', '<div class="card err">В файле нет заказов с ТТН.</div>'); return; }
+        localStorage.setItem(DROP_KEY, JSON.stringify(list));   // файл переживает переход на страницу статуса
+      } catch (e) { out('drop', '<div class="card err">Не удалось прочитать файл: ' + esc(e.message) + '</div>'); return; }
+    }
+    if (!onOrders() || curStatus() !== id) { saveJob({ t: Date.now(), type: 'drop', status: id, limit: limit, src: src }); location.href = '/orders/?status=' + id; return; }
+    scanDrop(src);
+  }
+  async function scanDrop(src) {
+    stopFlag = false; setBusy(true); progress('Ищу заказы без ТТН', 0, 0, '');
+    await waitFor(function () { return typeof window.Orders === 'function' && document.querySelector('.table-data'); }, 15000);
+    await sleep(2500);
+    var crm = await collectNoTtn(), drop = [], note = '';
+    var name = (statusOptions().filter(function (s) { return s.id === curStatus(); })[0] || {}).name || curStatus();
+    function fin(html) { setBusy(false); showTab('drop'); out('drop', html); }
+    if (!crm.length) return fin('<div class="card ok">В статусе «' + esc(name) + '» нет заказов без ТТН.</div>');
+    if (src === 'optdrop') {
+      try { drop = JSON.parse(localStorage.getItem(DROP_KEY) || '[]'); } catch (e) {}
+      if (!drop.length) return fin('<div class="card err">Файл Opt-Drop не загружен: выберите его и нажмите «Найти ТТН» ещё раз.</div>');
+    } else {
+      // листаем Aveopt, пока не найдём ТТН для всех заказов или не уйдём раньше самого старого заказа CRM
+      var oldest = crm.reduce(function (m, o) { return o.day && (!m || o.day < m) ? o.day : m; }, 0), need = {};
+      crm.forEach(function (o) { need[o.phone] = true; });
+      for (var p = 1; p <= 60 && !stopFlag; p++) {
+        progress('Читаю заказы Aveopt', 0, 0, 'страница ' + p + ', найдено ТТН: ' + drop.length);
+        var r = await aveoptPage(p);
+        if (!r.ok) return fin('<div class="card err">Aveopt: ' + esc(r.error || 'ошибка') + '</div>');
+        var pg = parseAveopt(r.html);
+        if (!pg.ok) return fin('<div class="card err">Не вижу списка заказов Aveopt. Войдите на aveopt.com.ua в этом браузере и повторите.</div>');
+        drop = drop.concat(pg.list);
+        pg.list.forEach(function (d) { delete need[d.phone]; });
+        if (!pg.rows || !Object.keys(need).length || (oldest && pg.minDay && pg.minDay < oldest)) break;
+        await sleep(300);
+      }
+      note = 'Прочитано заказов Aveopt с ТТН: ' + drop.length + '.';
+    }
+    var m = matchDrop(crm, drop), limit = lim('#lpr-limit-t'), n = limit > 0 ? Math.min(limit, m.pairs.length) : m.pairs.length;
+    var missHtml = m.miss.length ? '<div class="card warn"><b>Без ТТН останутся: ' + m.miss.length + '</b><div class="list">' +
+      m.miss.map(function (x) { return '<div>' + esc(x.o.name) + ' · ' + esc(x.o.phone) + ': ' + esc(x.why) + '</div>'; }).join('') + '</div></div>' : '';
+    if (!m.pairs.length) return fin('<div class="card warn">Заказов без ТТН в «' + esc(name) + '»: <b>' + crm.length + '</b>, но ТТН для них у дропа пока нет. ' + esc(note) + '</div>' + missHtml);
+    fin('<div class="card ok"><div class="big">' + m.pairs.length + ' из ' + crm.length + '</div>заказов без ТТН в «' + esc(name) + '» получат ТТН. ' + esc(note) + '<br>Будет вписано: <b>' + n + '</b>' +
+      '<div class="list">' + m.pairs.slice(0, 200).map(function (x) { return '<div>' + esc(x.o.name) + ' · ' + esc(x.o.phone) + ' → ' + x.d.ttn + ' (' + esc(x.d.src) + ')</div>'; }).join('') + '</div></div>' + missHtml +
+      '<button class="btn b4" id="lpr-dgo" type="button">Вписать ТТН</button><button class="btn b2" id="lpr-dno" type="button">Отмена</button>');
+    panel.querySelector('#lpr-dno').onclick = function () { out('drop', ''); };
+    panel.querySelector('#lpr-dgo').onclick = async function () {
+      setBusy(true); out('drop', '');
+      var r = await runDrop(m.pairs, limit);
+      setBusy(false);
+      out('drop', '<div class="card ' + (r.errs.length ? 'warn' : 'ok') + '"><div class="big">' + r.ok + ' из ' + r.total + '</div>ТТН вписана' + (r.stopped ? ' (остановлено)' : '') + '</div>' +
+        (r.errs.length ? '<div class="card err"><b>Ошибки</b><div class="list">' + r.errs.map(function (x) { return '<div>' + esc(x) + '</div>'; }).join('') + '</div></div>' : '') + missHtml);
     };
   }
 
@@ -518,11 +745,15 @@
       var s = panel.querySelector('#lpr-status'); if (s) s.value = job.status;
       panel.querySelector('#lpr-limit-d').value = job.limit;
       scanClear();
+    } else if (job.type === 'drop' && onOrders() && curStatus() === job.status) {
+      panel.querySelector('#lpr-dstatus').value = job.status; panel.querySelector('#lpr-dsrc').value = job.src;
+      panel.querySelector('#lpr-limit-t').value = job.limit;
+      scanDrop(job.src);
     } else if (job.type === 'create' && onOrders() && curStatus() === 'all') {
       panel.querySelector('#lpr-limit-c').value = job.limit;
       loadCreate(true);
     }
   }
   if (document.readyState === 'complete') setTimeout(start, 800); else window.addEventListener('load', function () { setTimeout(start, 800); });
-  window.__lpRobotTest = { prepOrders: prepOrders, phpSer: phpSer, runCreate: runCreate, apiCreate: apiCreate, findByCode: findByCode };
+  window.__lpRobotTest = { prepOrders: prepOrders, phpSer: phpSer, runCreate: runCreate, apiCreate: apiCreate, findByCode: findByCode, readXlsx: readXlsx, parseOptDrop: parseOptDrop, parseAveopt: parseAveopt, matchDrop: matchDrop };
 })();

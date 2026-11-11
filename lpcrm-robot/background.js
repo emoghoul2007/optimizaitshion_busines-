@@ -1,5 +1,13 @@
 // Запросы к таблице (Apps Script) идут отсюда: со страницы CRM их может не пропустить браузер.
 chrome.runtime.onMessage.addListener(function (msg, sender, reply) {
+  // Страница заказов Aveopt (под входом пользователя в этом браузере): только чтение списка, адрес фиксированный.
+  if (msg && msg.kind === 'lprobot-aveopt') {
+    var page = Math.max(1, Math.min(200, parseInt(msg.page, 10) || 1));
+    fetch('https://www.aveopt.com.ua/orders/?qnt_ord_page=20&search_order=&shipping=none&status=none&cpage=' + page, { credentials: 'include', cache: 'no-store', redirect: 'follow' })
+      .then(function (r) { return r.text().then(function (t) { reply(r.ok ? { ok: true, html: t } : { ok: false, error: 'код ответа ' + r.status }); }); })
+      .catch(function (e) { reply({ ok: false, error: 'нет связи с aveopt.com.ua: ' + e.message }); });
+    return true;
+  }
   if (!msg || msg.kind !== 'lprobot-sheet') return;
   var url = String(msg.url || '');
   if (!/^https:\/\/script\.google\.com\/macros\/(u\/\d+\/)?s\/[\w-]+\/exec\?t=\w+$/.test(url)) { reply({ ok: false, error: 'неверная ссылка таблицы' }); return; }
