@@ -109,7 +109,7 @@ function pokazatMenuZayavki() {
  */
 var UPDATE_CFG = {
   REPO: 'emoghoul2007/optimizaitshion_busines-',                 // например 'oleg/zayavki' - впишите после создания репозитория
-  SCRIPT_VERSION: '3.2.1'
+  SCRIPT_VERSION: '3.2.2'
 };
 
 function pokazatPanel() {
@@ -2140,7 +2140,7 @@ function perenestiStroki_(pool, nomera, postav) {
 /** Отправитель из кабинета НП (по ключу) + отделение отправки. Запоминается до смены настроек. */
 function otpravitelNp_(nast) {
   var props = PropertiesService.getScriptProperties();
-  var sig = ['v2', nast.gorod, nast.otdelenie, nast.telefon].join('|');
+  var sig = ['v3', nast.gorod, nast.otdelenie, nast.telefon].join('|');
   var saved = props.getProperty('NP_SENDER');
   if (saved) { try { var s = JSON.parse(saved); if (s.sig === sig) return s; } catch (e) {} }
   if (!nast.gorod || !nast.otdelenie || !telefonNp_(nast.telefon)) {
@@ -2209,12 +2209,22 @@ function otpravitelNp_(nast) {
       '. Допишите район в «Город отправки» через запятую, например «Чайки, Бучанський».');
   }
   var wh = whs[0];
-  var r2 = npZaprosy_([{ model: 'Counterparty', method: 'getCounterpartyContactPersons', props: { Ref: cp.Ref, Page: '1' } }]);
+  // ищем контактное лицо с нужным телефоном среди ВСЕХ отправителей (ФОП) этого ключа; на чужой телефон молча не откатываемся
   var tel = telefonNp_(nast.telefon);
-  var contacts = (r2[0] && r2[0].data) || [];
-  var contact = contacts.filter(function (c) { return telefonNp_(c.Phones) === tel; })[0] || contacts[0];
-  if (!contact) throw new Error('у отправителя в кабинете НП нет контактного лица');
-  var s2 = { sig: sig, sender: cp.Ref, contact: contact.Ref, phone: tel, city: wh.CityRef, address: wh.Ref };
+  var cps = (r1[0] && r1[0].data) || [];
+  var r2 = npZaprosy_(cps.map(function (c) { return { model: 'Counterparty', method: 'getCounterpartyContactPersons', props: { Ref: c.Ref, Page: '1' } }; }));
+  var contact = null, spisok = [];
+  cps.forEach(function (c, k) {
+    ((r2[k] && r2[k].data) || []).forEach(function (p) {
+      var phones = String(p.Phones || '').split(/[,;]/).map(telefonNp_).filter(Boolean);
+      spisok.push((c.Description || c.OwnershipFormDescription || 'отправитель') + ': ' + [p.LastName, p.FirstName].filter(Boolean).join(' ') + ' ' + (p.Phones || 'без телефона'));
+      if (!contact && (phones.indexOf(tel) >= 0 || telefonNp_(p.Phones) === tel)) { contact = p; cp = c; }
+    });
+  });
+  if (!contact) throw new Error('в кабинете НП по этому ключу нет контактного лица с телефоном ' + nast.telefon + '. ТТН не создаются, чтобы не уйти на чужой номер. ' +
+    'Контакты по ключу: ' + (spisok.join('; ') || 'нет') + '. Впишите в «' + TTN_SETTINGS + '» один из этих телефонов или добавьте контакт в кабинете НП. ' +
+    'Если нужного ФОП здесь нет, возможно, он под другим ключом НП.');
+  var s2 = { sig: sig, sender: cp.Ref, contact: contact.Ref, phone: tel, city: wh.CityRef, address: wh.Ref, who: (cp.Description || '') + ' / ' + [contact.LastName, contact.FirstName].filter(Boolean).join(' ') };
   props.setProperty('NP_SENDER', JSON.stringify(s2));
   return s2;
 }
@@ -2228,6 +2238,7 @@ function sozdatTtn() {
   var nast = nastroikiNp_();
   var otpr;
   try { otpr = otpravitelNp_(nast); } catch (e) { ui.alert('Не получилось: ' + e.message); return; }
+  ss.toast('Отправитель: ' + (otpr.who || '') + ', тел. +' + otpr.phone, TTN_SHEET, 8);
 
   var rows = sh.getRange(2, 1, sh.getLastRow() - 1, TTN_COLUMNS.length).getValues();
   var todo = [];

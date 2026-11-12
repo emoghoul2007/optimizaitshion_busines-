@@ -212,15 +212,23 @@
   }
   /** Строки файла Opt-Drop -> [{ttn, phone, name, day, crmId, src}] */
   function parseOptDrop(rowsX) {
+    // названия колонок у Opt-Drop меняются (укр./рус.): сравниваем без регистра, с латинской I вместо украинской І
+    function nz(x) { return String(x == null ? '' : x).toLowerCase().replace(/\u0456/g, 'i').replace(/\s+/g, ' ').trim(); }
+    function find(hdr, res) { for (var c = 0; c < hdr.length; c++) { var h = nz(hdr[c]); if (h && res.some(function (re) { return re.test(h); })) return c; } return -1; }
     var hi = -1, H = {};
-    for (var i = 0; i < Math.min(rowsX.length, 10) && hi < 0; i++) if (rowsX[i].indexOf('ТТН') >= 0 && rowsX[i].indexOf('Номер телефону') >= 0) hi = i;
-    if (hi < 0) throw new Error('не нашёл в файле колонки «ТТН» и «Номер телефону»');
-    rowsX[hi].forEach(function (h, c) { if (h) H[h] = c; });
+    for (var i = 0; i < Math.min(rowsX.length, 10) && hi < 0; i++) {
+      var hd = rowsX[i].map(nz);
+      if (hd.indexOf('ттн') >= 0 && hd.some(function (h) { return /^номер телефон/.test(h); })) hi = i;
+    }
+    if (hi < 0) throw new Error('не нашёл в файле колонки «ТТН» и «Номер телефона» (первые строки файла: ' + rowsX.slice(0, 3).map(function (r) { return r.filter(Boolean).slice(0, 6).join(' | '); }).join(' // ') + ')');
+    var hdr = rowsX[hi];
+    H.ttn = find(hdr, [/^ттн$/]); H.phone = find(hdr, [/^номер телефон/]); H.name = find(hdr, [/^(отримувач|получатель|одержувач)/]);
+    H.day = find(hdr, [/^дата (i|и) (час|время)/, /^дата/]); H.crm = find(hdr, [/^id (в|у) crm/]); H.id = find(hdr, [/^id$/]); H.status = find(hdr, [/^статус$/]);
     var list = [];
     rowsX.slice(hi + 1).forEach(function (r) {
-      var ttn = digits(r[H['ТТН']]); if (!/^\d{14}$/.test(ttn)) return;
-      var cancel = /Скасован|Відмінен/i.test(String(r[H['Статус']] || ''));
-      list.push({ cancel: cancel, ttn: ttn, phone: phone380(r[H['Номер телефону']]), name: String(r[H['Отримувач']] || '').trim(), day: dayNum(r[H['Дата і час']]), crmId: digits(r[H['ID в CRM']]), src: 'Opt-Drop №' + String(r[H['ІD']] || r[0] || '') + (cancel ? ', скасовано' : '') });
+      var ttn = digits(r[H.ttn]); if (!/^\d{14}$/.test(ttn)) return;
+      var cancel = H.status >= 0 && /скасован|відмінен|отменен|отменён|cancel/i.test(String(r[H.status] || ''));
+      list.push({ cancel: cancel, ttn: ttn, phone: phone380(r[H.phone]), name: String(r[H.name] || '').trim(), day: dayNum(r[H.day]), crmId: digits(r[H.crm]), src: 'Opt-Drop №' + String(r[H.id >= 0 ? H.id : 0] || '') + (cancel ? ', скасовано' : '') });
     });
     return list;
   }
