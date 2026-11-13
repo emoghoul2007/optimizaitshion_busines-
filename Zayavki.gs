@@ -109,7 +109,7 @@ function pokazatMenuZayavki() {
  */
 var UPDATE_CFG = {
   REPO: 'emoghoul2007/optimizaitshion_busines-',                 // например 'oleg/zayavki' - впишите после создания репозитория
-  SCRIPT_VERSION: '3.2.2'
+  SCRIPT_VERSION: '3.3.0'
 };
 
 function pokazatPanel() {
@@ -617,11 +617,19 @@ function vypulitTovary() {
     if (String(adresa[n]).indexOf('⚠') === 0) neNaideno++;
   });
 
-  var start = out.getLastRow() + 1;
+  // Пишем строго под последней занятой строкой (по Call ID), под замком: параллельная проверка ИИ/сортировка
+  // не должна затереть уже выпуленные строки.
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); } catch (e) { /* без замка тоже пишем, но ниже строки не затираем */ }
+  var start = 2;
+  var idsNow = out.getLastRow() > 1 ? out.getRange(2, P_('Call ID') + 1, out.getLastRow() - 1, 1).getValues() : [];
+  for (var q = idsNow.length - 1; q >= 0; q--) { if (String(idsNow[q][0]).trim()) { start = q + 3; break; } }
+  start = Math.max(start, out.getLastRow() + 1);
   tekstovyeKolonkiPula_(out, start, toAdd.length);
   out.getRange(start, 1, toAdd.length, POOL_COLUMNS.length).setValues(toAdd);
   rovnyeStroki_(out, start, toAdd.length);
   ssylkiTg_(out);
+  try { lock.releaseLock(); } catch (e2) { /* замок не брали */ }
   ss.toast('День: ' + sheet.getName() + '. Добавлено заказов: ' + toAdd.length +
            (neNaideno ? '. Адрес не найден в НП: ' + neNaideno + ' (отмечены ⚠, поправьте перед отправкой)' : ''),
            ZAYAVKI_CFG.POOL_SHEET, 10);
@@ -2750,20 +2758,20 @@ function zapisatUdalenie_(sh, z, status) {
 // Расширение «Робот LP-CRM» создаёт по этим строкам заказы в CRM (статус «Импорт») и вписывает ТТН.
 // Строки копируются из листа и вставляются в окно расширения, поэтому порядок колонок менять нельзя.
 var CRMZ_SHEET = 'Заказы на СРМ';
-var CRMZ_COLUMNS = ['Статус', 'ТТН', 'ФИО', 'Телефон', 'Товар', 'Кол-во', 'Сумма', 'Адрес НП', 'ID товара СРМ', 'Call ID', 'Комментарий'];
+var CRMZ_COLUMNS = ['Статус', 'ТТН', 'ФИО', 'Телефон', 'Товар', 'Кол-во', 'Сумма', 'Адрес НП', 'ID товара СРМ', 'Call ID', 'Комментарий', 'Офис'];
 function ZC_(name) { return CRMZ_COLUMNS.indexOf(name); }
 
-/** Кнопка: выделенные строки «НП лиды» (с ТТН) -> лист «Заказы на СРМ». */
+/** Кнопка: выделенные строки «НП лиды» (с ТТН или без: без ТТН - заказы только для дроп-платформ) -> лист «Заказы на СРМ». */
 function perenestiVZakazyNaCrm() {
   var ss = SpreadsheetApp.getActive(), ui = SpreadsheetApp.getUi();
   var src = ss.getSheetByName(TTN_SHEET);
   if (!src || ss.getActiveSheet().getName() !== TTN_SHEET) {
-    ui.alert('Откройте лист «' + TTN_SHEET + '», выделите строки с ТТН и нажмите кнопку ещё раз.'); return;
+    ui.alert('Откройте лист «' + TTN_SHEET + '», выделите строки заказов (с ТТН или без) и нажмите кнопку ещё раз.'); return;
   }
   var nomera = vydelennyeStroki_(src).filter(function (r) { return r <= src.getLastRow(); });
   if (!nomera.length) { ui.alert('Выделите строки заказов в «' + TTN_SHEET + '».'); return; }
   var tovary = tovaryNp_();
-  var dest = listTtn_(CRMZ_SHEET, CRMZ_COLUMNS, [200, 130, 190, 110, 240, 60, 80, 340, 110, 110, 320]);
+  var dest = listTtn_(CRMZ_SHEET, CRMZ_COLUMNS, [200, 130, 190, 110, 240, 60, 80, 340, 110, 110, 320, 60]);
   var est = {};
   if (dest.getLastRow() > 1) {
     dest.getRange(2, ZC_('Call ID') + 1, dest.getLastRow() - 1, 1).getValues().forEach(function (r) { est[String(r[0]).trim()] = true; });
@@ -2783,7 +2791,6 @@ function perenestiVZakazyNaCrm() {
     var r = vse[n - 2];
     var cid = String(r[TC_('Call ID')]).trim(), ttn = String(r[TC_('ТТН')]).replace(/\D/g, '');
     if (!cid) return;
-    if (!ttn) { propuski.push(n + ' (нет ТТН)'); return; }
     if (est[cid]) { propuski.push(n + ' (уже на листе)'); return; }
     var items = razobratTovary_(r[TC_('Товар')]);
     var t = items.length ? tovary[klyuchTovara_(items[0].name)] : null;
@@ -2797,6 +2804,7 @@ function perenestiVZakazyNaCrm() {
     z[ZC_('ТТН')] = ttn; z[ZC_('ФИО')] = r[TC_('ФИО')]; z[ZC_('Телефон')] = String(r[TC_('Телефон')]);
     z[ZC_('Товар')] = r[TC_('Товар')]; z[ZC_('Кол-во')] = qty; z[ZC_('Сумма')] = sum;
     z[ZC_('Адрес НП')] = r[TC_('Адрес НП')]; z[ZC_('ID товара СРМ')] = id; z[ZC_('Call ID')] = cid;
+    z[ZC_('Офис')] = '';   // впишите 1, 2 или 3 - в каком офисе CRM создать заказ (пусто = 1)
     z[ZC_('Комментарий')] = '';   // в CRM комментарий не пишем; колонку можно заполнить вручную
     est[cid] = true;
     add.push(z);
@@ -2861,7 +2869,7 @@ function doGet_(e) {
       if (!cid || /^OK/i.test(String(r[ZC_('Статус')]).trim())) return;
       rows.push({ row: i + 2, ttn: r[ZC_('ТТН')], name: r[ZC_('ФИО')], phone: r[ZC_('Телефон')], tovar: r[ZC_('Товар')],
                   qty: r[ZC_('Кол-во')], sum: r[ZC_('Сумма')], addr: r[ZC_('Адрес НП')], pid: r[ZC_('ID товара СРМ')],
-                  code: cid, comment: r[ZC_('Комментарий')] });
+                  code: cid, comment: r[ZC_('Комментарий')], office: r[ZC_('Офис')] });
     });
   }
   return robotOtvet_({ ok: true, rows: rows });

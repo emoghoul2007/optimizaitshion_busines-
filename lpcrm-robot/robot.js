@@ -379,9 +379,9 @@
       var g = function (v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); };
       var o = { row: r.row, ttn: digits(r.ttn), name: g(r.name), phone: digits(r.phone), tovar: g(r.tovar),
                 sum: parseFloat(g(r.sum).replace(/\s/g, '').replace(',', '.')) || 0, addr: g(r.addr),
-                pid: digits(r.pid), code: digits(r.code), comment: g(r.comment), err: '' };
+                pid: digits(r.pid), code: digits(r.code), comment: g(r.comment), office: digits(r.office) || CFG.OFFICE, err: '' };
       if (o.phone.length === 10 && o.phone[0] === '0') o.phone = '38' + o.phone;
-      if (o.ttn.length !== 14) o.err = 'ТТН должна быть из 14 цифр';
+      if (o.ttn && o.ttn.length !== 14) o.err = 'ТТН должна быть из 14 цифр (или оставьте пустой)';
       else if (!o.pid) o.err = 'нет ID товара СРМ';
       else if (!o.code) o.err = 'нет Call ID';
       else if (!o.phone) o.err = 'нет телефона';
@@ -393,7 +393,7 @@
     if (!CFG.API_KEY) return { id: '', err: 'не указан ключ API (вкладка «Настройки»)' };
     var body = new URLSearchParams();
     var data = {
-      key: CFG.API_KEY, order_id: o.code, country: CFG.COUNTRY, office: CFG.OFFICE,
+      key: CFG.API_KEY, order_id: o.code, country: CFG.COUNTRY, office: o.office || CFG.OFFICE,
       products: encodeURIComponent(phpSer([{ product_id: o.pid, price: o.sum, count: 1 }])),
       bayer_name: o.name, phone: o.phone, email: '', comment: o.comment || '',
       delivery: CFG.DELIVERY_NP, delivery_adress: o.addr, payment: CFG.PAYMENT,
@@ -490,10 +490,12 @@
         // заказ с таким Call ID уже есть (повторный запуск) или CRM не вернула ID: ищем его по списку
         var row = await findByCode(o.code);
         if (!row) { mark(o, r1.err ? '⚠ CRM не создала заказ: ' + r1.err : '⚠ заказ создан, но не найден - ТТН впишите вручную', false); continue; }
+        if (!o.ttn) { mark(o, 'OK СРМ ' + now() + ' (уже был в CRM, ID ' + row.id + ', без ТТН)', true); continue; }
         if (digits(row.dataset.ttn) === o.ttn) { mark(o, 'OK СРМ ' + now() + ' (уже был в CRM, ID ' + row.id + ')', true); continue; }
         if (digits(row.dataset.ttn)) { mark(o, '⚠ заказ с таким Call ID уже есть в CRM с другой ТТН ' + digits(row.dataset.ttn), false); continue; }
         id = row.id; info = (row.dataset.info || (row.id + '|' + o.code)).split('|');
       }
+      if (!o.ttn) { mark(o, 'OK СРМ ' + now() + ' (ID ' + id + ', без ТТН, офис ' + o.office + ')', true); continue; }
       var e2 = await fillTtn(info, o);
       if (e2) mark(o, '⚠ заказ ' + (created ? 'создан' : 'найден') + ' (ID ' + id + '), но ТТН не вписана: ' + e2, false);
       else mark(o, 'OK СРМ ' + now() + ' (ID ' + id + ')', true);
