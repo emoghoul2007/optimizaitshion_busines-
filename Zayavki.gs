@@ -113,7 +113,7 @@ function pokazatMenuZayavki() {
  */
 var UPDATE_CFG = {
   REPO: 'emoghoul2007/optimizaitshion_busines-',                 // например 'oleg/zayavki' - впишите после создания репозитория
-  SCRIPT_VERSION: '3.4.3',
+  SCRIPT_VERSION: '3.4.4',
   PHOTO_DIR: 'photos'            // папка с фото товаров в репозитории (для «Пакета поставщику»)
 };
 
@@ -2798,13 +2798,10 @@ function otpravitAlbom_(paket, nakleiki) {
   tgVyzov_('sendMessage', { text: tekst });
   for (var i = 0; i < bloby.length; i += 10) {
     var part = bloby.slice(i, i + 10);
-    if (part.length === 1) { tgOtpravitFail_(part[0], i === 0 ? podpis : (paket.fotoImena[i - nakleiki.length] || '')); continue; }
+    if (part.length === 1) { tgOtpravitFail_(part[0], ''); continue; }
     var media = [], payload = {};
     part.forEach(function (b, k) {
       var m = { type: 'document', media: 'attach://f' + k };
-      var nom = i + k;   // номер файла в общем списке: первым идёт PDF с наклейками
-      if (nom === 0) m.caption = podpis;
-      else if (paket.fotoImena[nom - nakleiki.length]) m.caption = paket.fotoImena[nom - nakleiki.length].slice(0, 1000);   // под каждым фото - название товара
       media.push(m);
       payload['f' + k] = b;
     });
