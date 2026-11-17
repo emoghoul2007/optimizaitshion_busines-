@@ -70,6 +70,10 @@ function pokazatMenuZayavki() {
       .addItem('Создать ТТН (НП лиды без ТТН)', 'sozdatTtn')
       .addItem('Печать наклеек 100×100', 'pechatNakleek')
       .addItem('Обновить статистику НП лидов', 'obnovitStatistikuNpLidov')
+      .addItem('Пакет поставщику в Telegram (один PDF)', 'otpravitPaketTelegram')
+      .addItem('Пакет поставщику: отдельными файлами', 'otpravitPaketRazdelno')
+      .addItem('Редактировать цены в НП лидах', 'redaktirovatTseny')
+      .addItem('Каких фото товаров не хватает', 'proveritFotoTovarov')
       .addItem('Перенести выделенные в «Заказы на СРМ» (для расширения)', 'perenestiVZakazyNaCrm')
       .addSeparator()
       .addItem('Выпулить заказы в СРМ 1', 'otpravitVCrm1')
@@ -90,7 +94,8 @@ function pokazatMenuZayavki() {
       .addItem('Указать ключ Новой Почты', 'ukazatKlyuchNp')
       .addItem('Указать ключ НП из LP-CRM (удаление ТТН)', 'ukazatKlyuchNpCrm')
       .addItem('Ссылка для расширения «Робот LP-CRM»', 'ssylkaDlyaRasshireniya')
-      .addItem('Указать ключ OpenRouter', 'ukazatKlyuchOpenRouter');
+      .addItem('Указать ключ OpenRouter', 'ukazatKlyuchOpenRouter')
+      .addItem('Указать Telegram: бот и чат', 'ukazatKlyuchTelegram');
   ui.createMenu('Заявки')
     .addItem('▶ Открыть панель', 'pokazatPanel')
     .addItem('▶ Открыть панель в широком окне', 'pokazatPanelOkno')
@@ -109,7 +114,8 @@ function pokazatMenuZayavki() {
  */
 var UPDATE_CFG = {
   REPO: 'emoghoul2007/optimizaitshion_busines-',                 // например 'oleg/zayavki' - впишите после создания репозитория
-  SCRIPT_VERSION: '3.3.0'
+  SCRIPT_VERSION: '3.4.0',
+  PHOTO_DIR: 'photos'            // папка с фото товаров в репозитории (для «Пакета поставщику»)
 };
 
 function pokazatPanel() {
@@ -190,7 +196,7 @@ function ustanovitSkriptTablitsy() {
 }
 
 /*PANEL_BEGIN*/
-var PANEL_HTML_ = "<!DOCTYPE html>\n<html><head><base target=\"_top\"><meta charset=\"utf-8\">\n<style>\n@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');\n:root{\n  --bg:#fff6e0; --panel:#ffffff; --line:#2a2d43; --text:#2a2d43; --mut:#6b7089;\n  --green:#5fd49a; --yellow:#ffd24a; --red:#ff8a7a; --blue:#6cb8ff; --cyan:#7fe3e0; --violet:#c4a5ff; --gray:#d9dde6;\n  --px:3px;\n}\n*{box-sizing:border-box;margin:0;padding:0}\nhtml,body{background:var(--bg);color:var(--text);font-family:Roboto,Arial,sans-serif;font-size:15px;line-height:1.25}\nbody{padding:10px 9px 24px}\n.wide{max-width:460px;margin:0 auto}\n.title{font-family:'Press Start 2P','Courier New',monospace;font-size:11px;color:var(--text);display:flex;align-items:center;gap:8px;margin:2px 2px 12px;letter-spacing:.5px}\nsvg{shape-rendering:crispEdges;display:block;flex:none}\n.pix{box-shadow:0 calc(var(--px)*-1) 0 0 var(--line),0 var(--px) 0 0 var(--line),calc(var(--px)*-1) 0 0 0 var(--line),var(--px) 0 0 0 var(--line)}\n.box{background:var(--panel);margin:var(--px);padding:9px 9px 10px}\n.status{margin-bottom:14px}\n.status h3{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--text);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}\n.led{width:10px;height:10px;background:#b9bfce;display:inline-block;margin-right:6px;outline:2px solid var(--line)}\n.led.on{background:var(--green);animation:bl 1s steps(2) infinite}\n@keyframes bl{50%{background:#fff}}\n.bar{height:16px;background:var(--line);padding:3px;display:flex;gap:2px;margin:6px 0 8px}\n.bar i{flex:1;background:#4a4f6e}\n.bar i.f{background:var(--green)}\n.row{display:flex;justify-content:space-between;gap:8px;color:var(--mut);font-size:14px;margin-top:2px}\n.row b{color:var(--text);font-weight:700;text-align:right}\n.sec{margin:14px 0 0}\n.sec>.hd{cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 8px;margin:var(--px);color:var(--text);font-family:'Press Start 2P',monospace;font-size:9px;user-select:none}\n.sec>.hd .n{margin-left:auto;font-size:8px;opacity:.7}\n.sec>.hd .ar{width:9px;height:9px;background:currentColor;clip-path:polygon(0 0,100% 0,50% 100%)}\n.sec.closed>.hd .ar{clip-path:polygon(0 0,100% 50%,0 100%)}\n.sec.closed>.list{display:none}\n.list{padding:8px 3px 2px;display:grid;gap:9px}\n.btn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:9px;margin:var(--px);padding:9px 9px;background:var(--c,var(--blue));color:var(--text);font:700 15px/1.2 Roboto,Arial,sans-serif;\n  box-shadow:0 calc(var(--px)*-1) 0 0 var(--line),0 var(--px) 0 0 var(--line),calc(var(--px)*-1) 0 0 0 var(--line),var(--px) 0 0 0 var(--line),inset calc(var(--px)*-1) calc(var(--px)*-1) 0 0 rgba(42,45,67,.18),inset var(--px) var(--px) 0 0 rgba(255,255,255,.6)}\n.btn:hover{filter:brightness(1.06) saturate(1.1)}\n.btn:active,.btn.busy{box-shadow:0 calc(var(--px)*-1) 0 0 var(--line),0 var(--px) 0 0 var(--line),calc(var(--px)*-1) 0 0 0 var(--line),var(--px) 0 0 0 var(--line),inset var(--px) var(--px) 0 0 rgba(42,45,67,.22);transform:translate(2px,2px)}\n.btn.busy{pointer-events:none;filter:saturate(.6)}\n.btn.busy .t::after{content:' ...'}\n.btn .t{flex:1;text-align:left}\n.btn small{display:block;font-weight:400;font-size:13px;color:#454a66;margin-top:1px}\n.c-green{--c:var(--green)}.c-blue{--c:var(--blue)}.c-cyan{--c:var(--cyan)}.c-red{--c:var(--red)}.c-yellow{--c:var(--yellow)}.c-violet{--c:var(--violet)}.c-gray{--c:var(--gray)}\n.s1>.hd{background:var(--green)}.s2>.hd{background:var(--blue)}.s3>.hd{background:var(--yellow)}.s4>.hd{background:var(--violet)}.s5>.hd{background:var(--red)}.s6>.hd{background:var(--cyan)}.s7>.hd{background:var(--gray)}\n.log{margin-top:14px;font-size:13px;color:var(--mut);max-height:120px;overflow:auto;white-space:pre-wrap}\n.log .e{color:#c0392b}.log .o{color:#1e8a55}\n.ver{margin-top:12px;text-align:center;color:#a9a48f;font-size:12px}\n\n.pet{display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:0}\n#pet-name{font-weight:700;cursor:pointer;border-bottom:2px dotted var(--mut)}\n#pet-name input{font:inherit;width:120px;border:2px solid var(--line);padding:1px 4px}\n#pet-lvl{color:var(--mut)}\n.fx{position:fixed;z-index:51;pointer-events:none;font-size:13px;font-weight:700;color:#2a2d43;white-space:nowrap;animation:fx 1s steps(8) forwards}\n@keyframes fx{to{transform:translateY(-46px);opacity:0}}\n#slime{position:fixed;left:0;top:0;width:54px;height:36px;z-index:50;cursor:pointer;will-change:transform;transform-origin:0 0}\n#slime svg{width:54px;height:36px;overflow:visible}\nbody{padding-bottom:64px}\n</style></head>\n<body><div class=\"wide\">\n<div class=\"title\"><svg id=\"logo\" width=\"24\" height=\"24\" viewBox=\"0 0 8 8\"></svg>АВТОМАТИЗАЦИЯ</div>\n\n<div class=\"box pix status\">\n  <h3><span><span class=\"led\" id=\"led\"></span>ПРОВЕРКА ИИ</span><span id=\"st-state\">...</span></h3>\n  <div class=\"bar\" id=\"bar\"></div>\n  <div class=\"row\"><span>Не проверено</span><b id=\"st-left\">-</b></div>\n  <div class=\"row\"><span>Потрачено</span><b id=\"st-cost\">-</b></div>\n  <div class=\"row\"><span>Ждут Sonnet</span><b id=\"st-son\">-</b></div>\n  <div class=\"row\"><span>Сегодня проверено</span><b id=\"st-day\">-</b></div>\n  <div class=\"row\"><span>Посл. порция</span><b id=\"st-last\" style=\"font-size:12px\">-</b></div>\n</div>\n\n<div class=\"box pix pet\"><span id=\"pet-name\" title=\"Нажмите, чтобы переименовать\"></span><span id=\"pet-lvl\"></span></div>\n<div id=\"app\"></div>\n<div class=\"log pix box\" id=\"log\" hidden></div>\n<div class=\"ver\" id=\"ver\"></div>\n\n</div><script>\n// ---- пиксельные иконки 8x8 ('#' = пиксель)\nvar IC = {\n  play:['..#.....','..##....','..###...','..####..','..###...','..##....','..#.....','........'],\n  stop:['........','.######.','.######.','.######.','.######.','.######.','.######.','........'],\n  chk:['........','......#.','.....##.','#...##..','##.##...','.###....','..#.....','........'],\n  box:['.######.','#......#','#.####.#','#......#','#......#','#......#','#......#','.######.'],\n  key:['..###...','.#...#..','.#...#..','..###...','...#....','...##...','...#....','...##...'],\n  send:['#.......','###.....','#####...','#######.','#####...','###.....','#.......','........'],\n  trash:['..####..','########','.#.##.#.','.#.##.#.','.#.##.#.','.#.##.#.','.######.','........'],\n  sort:['...#....','..###...','.#####..','...#....','...#....','.#####..','..###...','...#....'],\n  find:['..###...','.#...#..','#.....#.','#.....#.','.#...#..','..###.#.','.....###','......#.'],\n  print:['..####..','..#..#..','########','#......#','#..##..#','########','..#..#..','..####..'],\n  dl:['...##...','...##...','...##...','.######.','..####..','...##...','########','........'],\n  list:['#.######','........','#.######','........','#.######','........','#.######','........'],\n  star:['...##...','...##...','########','.######.','..####..','..#..#..','.#....#.','........']\n};\nfunction icon(name,color){\n  var m=IC[name]||IC.star,r='';\n  m.forEach(function(row,y){for(var x=0;x<8;x++)if(row[x]==='#')r+='<rect x=\"'+x+'\" y=\"'+y+'\" width=\"1\" height=\"1\"/>';});\n  return '<svg width=\"20\" height=\"20\" viewBox=\"0 0 8 8\" fill=\"'+(color||'#2a2d43')+'\">'+r+'</svg>';\n}\ndocument.getElementById('logo').innerHTML=(function(){var r='';IC.star.forEach(function(row,y){for(var x=0;x<8;x++)if(row[x]==='#')r+='<rect x=\"'+x+'\" y=\"'+y+'\" width=\"1\" height=\"1\" fill=\"#ffb300\"/>';});return r;})();\n\n// ---- разделы и кнопки: [название, функция, цвет, иконка, подпись]\nvar SECTIONS = [\n  {id:'s1', title:'1 СБОР', open:true, items:[\n    ['Статистика за сегодня','sobratStatistiku','green','chk'],\n    ['Выпулить крупные','vypulitKrupnye','green','dl','сумма от порога, лист «1800+»'],\n    ['Выпулить товары в «пул»','vypulitTovary','green','dl','товары из «Статистики»']\n  ]},\n  {id:'s2', title:'2 ПРОВЕРКА ИИ', open:true, items:[\n    ['Haiku 5.5 - проверить пул','proveritPulHaiku','blue','play','дёшево, сам разбирает ⚠'],\n    ['Sonnet 5.5 - проверить пул','proveritPulSonnet','blue','play','точнее, для остатка'],\n    ['Как идёт проверка','statusProverkiIi','cyan','list'],\n    ['Отсортировать пул','sortirovatPulKnopka','cyan','sort','✓ ≈ ⚠'],\n    ['Остановить проверку','ostanovitProverkuIi','red','stop']\n  ]},\n  {id:'s3', title:'3 ЛИДЫ НП', open:false, items:[\n    ['Перенести в «НП лиды»','perenestiVNpLidy','yellow','send','выделенные строки пула'],\n    ['Выпулить для Скайлаба','vypulitDlyaSkailab','yellow','box'],\n    ['Выпулить для Щербака','vypulitDlyaShcherbak','yellow','box'],\n    ['Создать ТТН','sozdatTtn','yellow','play','лиды без ТТН'],\n    ['Печать наклеек 100×100','pechatNakleek','yellow','print'],\n    ['Обновить статистику лидов','obnovitStatistikuNpLidov','cyan','list']\n  ]},\n  {id:'s4', title:'4 CRM', open:false, items:[\n    ['В «Заказы на СРМ»','perenestiVZakazyNaCrm','violet','send','для робота LP-CRM, с ТТН'],\n    ['Выпулить заказы в СРМ 1','otpravitVCrm1','violet','send'],\n    ['Выпулить заказы в СРМ 2','otpravitVCrm2','violet','send']\n  ]},\n  {id:'s5', title:'5 ДРОП И ТТН', open:false, items:[\n    ['Выгрузить дропу (TXT)','vygruzitDlyaDropa','red','dl','выделенные строки пула'],\n    ['Выпулить ТТН: «ОПТ ДРОП»','vypulitTtnOptDrop','red','list'],\n    ['Выпулить ТТН: «АВЕ ОПТ»','vypulitTtnAveOpt','red','list'],\n    ['Удалить ТТН','udalitTtn','red','trash','лист «ТТН на удаление»']\n  ]},\n  {id:'s6', title:'6 РАСШИРЕНИЯ', open:false, items:[\n    ['Установить робот LP-CRM','ustanovitRasshirenieCrm','cyan','dl','расширение Chrome'],\n    ['Обновить скрипт таблицы','ustanovitSkriptTablitsy','cyan','dl','проверка версии и ссылка'],\n    ['Ссылка и код для робота','ssylkaDlyaRasshireniya','gray','key']\n  ]},\n  {id:'s7', title:'7 КЛЮЧИ', open:false, items:[\n    ['Ключ СРМ 1','ukazatKlyuchCrm1','gray','key'],\n    ['Выходной ключ СРМ 1','ukazatVyhodnoiKlyuchCrm1','gray','key','чтение заказов'],\n    ['Адрес и ключ СРМ 2','ukazatKlyuchCrm2','gray','key'],\n    ['Ключ Новой Почты','ukazatKlyuchNp','gray','key'],\n    ['Ключ НП из LP-CRM','ukazatKlyuchNpCrm','gray','key','удаление ТТН'],\n    ['Ключ OpenRouter','ukazatKlyuchOpenRouter','gray','key']\n  ]}\n];\n\nvar app=document.getElementById('app');\nSECTIONS.forEach(function(s){\n  var d=document.createElement('div'); d.className='sec '+s.id+(s.open?'':' closed');\n  d.innerHTML='<div class=\"hd pix\"><i class=\"ar\"></i>'+s.title+'<span class=\"n\">'+s.items.length+'</span></div><div class=\"list\"></div>';\n  var list=d.querySelector('.list');\n  s.items.forEach(function(it){\n    var b=document.createElement('button'); b.className='btn c-'+it[2]; b.type='button';\n    b.innerHTML=icon(it[3])+'<span class=\"t\">'+it[0]+(it[4]?'<small>'+it[4]+'</small>':'')+'</span>';\n    b.onclick=function(){run(b,it[1],it[0]);};\n    list.appendChild(b);\n  });\n  d.querySelector('.hd').onclick=function(){d.classList.toggle('closed'); try{localStorage.setItem('zp_'+s.id,d.classList.contains('closed')?'0':'1');}catch(e){}};\n  try{var v=localStorage.getItem('zp_'+s.id); if(v==='1')d.classList.remove('closed'); else if(v==='0')d.classList.add('closed');}catch(e){}\n  app.appendChild(d);\n});\n\nvar logEl=document.getElementById('log');\nfunction log(msg,cls){logEl.hidden=false; var t=new Date(), p=function(n){return (n<10?'0':'')+n;};\n  logEl.insertAdjacentHTML('afterbegin','<div class=\"'+(cls||'')+'\">'+p(t.getHours())+':'+p(t.getMinutes())+' '+msg+'</div>');}\nfunction run(btn,fn,name){\n  if(btn.classList.contains('busy'))return;\n  btn.classList.add('busy');\n  google.script.run\n    .withSuccessHandler(function(){btn.classList.remove('busy'); log(name+' - готово','o'); if(window.pet)pet.hop(); refresh();})\n    .withFailureHandler(function(e){btn.classList.remove('busy'); log(name+': '+(e&&e.message||e),'e'); if(window.pet)pet.sad();})\n    [fn]();\n}\n\nvar prevIdet=null;\nfunction refresh(){\n  google.script.run.withSuccessHandler(function(d){\n    if(!d)return;\n    if(window.pet){ if(prevIdet===true&&!d.idet){ if(d.left===0)pet.happy(); else pet.sad(); } pet.day(d.day||0); } prevIdet=d.idet;\n    document.getElementById('st-day').textContent=d.day||0;\n    document.getElementById('st-son').textContent=d.sonnet||0;\n    document.getElementById('led').className='led'+(d.idet?' on':'');\n    document.getElementById('st-state').textContent=d.idet?d.model:'СТОП';\n    document.getElementById('st-left').textContent=d.left;\n    document.getElementById('st-cost').textContent='$'+d.cost.toFixed(2);\n    document.getElementById('st-last').textContent=d.last||'-';\n    document.getElementById('ver').textContent='v'+d.version;\n    var bar=document.getElementById('bar'),N=20,total=Math.max(d.total||0,d.left||0),done=total?Math.round((1-d.left/total)*N):0;\n    bar.innerHTML='';for(var i=0;i<N;i++)bar.insertAdjacentHTML('beforeend','<i class=\"'+(i<done?'f':'')+'\"></i>');\n  }).dannyePaneli();\n}\nrefresh(); setInterval(refresh,15000);\n\n// ---- кот: ходит по низу панели, садится «булкой», спит, идёт за курсором, реагирует на события, растёт с уровнем\n(function(){\n  var BASE=[\n    '............O...O.',\n    '...........OFO.OFO',\n    'O..........OFFOFFO',\n    'OO.........OFFFFFO',\n    '.O.........OEFFEFO',\n    '.OO........OFFPFFO',\n    '..OOOOOOOOOOCCCCO.',\n    '..OFFSFFSFFFFFFO..',\n    '..OFFFFFFFFFFFO...',\n    '..OFFFFFFFFFFO....'];\n  var LEGS={a:['..OFOFO..OFOFO....','..OO.OO..OO.OO....'],b:['...OFOFOOFOFO.....','...OO.OOOO.OO.....'],loaf:['..OFFFFFFFFFFO....','..OOOOOOOOOOOO....']};\n  var TAIL_UP=['O..','O..','OO.','.O.','.O.','.OO'];           // хвост трубой (строки 0-5)\n  var el=document.createElement('div'); el.id='slime';\n  var PAL={O:'#2a2d43',F:'#ffa94d',S:'#e8842a',P:'#ff8fa3',W:'#fff'};\n  var COLLAR={idle:'#5fd49a',work:'#6cb8ff',busy:'#ffd24a'};\n  var mood='idle',feel='',feelT=0,size=1,legs='loaf',tailUp=false,eyes='open',key='';\n  function paint(){\n    var k=[mood,feel,legs,tailUp,eyes].join('|'); if(k===key)return; key=k;\n    var rows=BASE.concat(LEGS[legs]).map(function(r,y){return (tailUp&&y<6)?TAIL_UP[y]+r.slice(3):((tailUp&&y===0)?r:r);});\n    if(tailUp)rows=rows.map(function(r,y){return y<6?TAIL_UP[y]+r.slice(3):r;});\n    var fur=feel==='sad'?'#c9cdd8':PAL.F, spot=feel==='sad'?'#9aa0b5':PAL.S, s='';\n    rows.forEach(function(r,y){for(var x=0;x<18;x++){var c=r[x],col=null;\n      if(c==='O')col=PAL.O;else if(c==='F')col=fur;else if(c==='S')col=spot;else if(c==='P')col=PAL.P;else if(c==='C')col=COLLAR[mood];\n      else if(c==='E')col=eyes==='open'?PAL.O:eyes==='angry'?'#e03131':spot;\n      if(col)s+='<rect x=\"'+x+'\" y=\"'+y+'\" width=\"1\" height=\"1\" fill=\"'+col+'\"/>';}});\n    if(eyes==='open')s+='<rect x=\"12\" y=\"4\" width=\".5\" height=\".5\" fill=\"#fff\"/><rect x=\"15\" y=\"4\" width=\".5\" height=\".5\" fill=\"#fff\"/>';\n    el.innerHTML='<svg viewBox=\"0 0 18 12\">'+s+'</svg>';\n  }\n  var W=54,H=36,x=30,y=-60,vy=0,dir=1,on=false,t=0,state='sit',stT=120,target=0,lastAct=0,mouseX=-1,mouseT=-9999;\n  function fx(ch){var s=document.createElement('div');s.className='fx';s.textContent=ch;s.style.left=(x+W*size/2-6+(Math.random()*24-12))+'px';s.style.top=(y-10)+'px';document.body.appendChild(s);setTimeout(function(){s.remove();},1000);}\n  // имя и уровень: растёт от числа проверенных за сегодня заказов (каждые 25 - уровень, до 10-го)\n  var nameEl=document.getElementById('pet-name'),lvlEl=document.getElementById('pet-lvl'),lvl=-1;\n  function petName(){try{return localStorage.getItem('zp_cat')||'Мурзик';}catch(e){return 'Мурзик';}}\n  nameEl.textContent=petName();\n  nameEl.onclick=function(){\n    if(nameEl.querySelector('input'))return;\n    var inp=document.createElement('input');inp.value=petName();inp.maxLength=14;nameEl.textContent='';nameEl.appendChild(inp);inp.focus();inp.select();\n    function done(){var v=inp.value.trim()||'Мурзик';try{localStorage.setItem('zp_cat',v);}catch(e){}nameEl.textContent=v;el.title=v;}\n    inp.onblur=done;inp.onkeydown=function(e){if(e.key==='Enter')inp.blur();};\n  };\n  function go(s,dur){state=s;stT=dur||0;}\n  window.pet={\n    happy:function(){feel='happy';feelT=420;lastAct=t;go('sit',9999);},\n    sad:function(){feel='sad';feelT=360;lastAct=t;go('sit',9999);fx('ш-ш!');},\n    hop:function(){if(!feel&&on){vy=-8;on=false;lastAct=t;if(state==='sleep')go('sit',80);}},\n    day:function(n){var L=Math.min(10,Math.floor(n/25));lvlEl.textContent='ур. '+L+(L<10?' · до след. '+(25-n%25):' · макс.');\n      if(L!==lvl){if(lvl>=0&&L>lvl){window.pet.happy();fx('★');}lvl=L;size=1+L*.07;}}\n  };\n  paint(); document.body.appendChild(el); el.title=petName();\n  el.onclick=function(){lastAct=t;if(on){vy=-11;on=false;}fx('мяу');if(state==='sleep')go('sit',100);};\n  document.addEventListener('mousemove',function(e){mouseX=e.clientX;mouseT=t;});\n  function step(){\n    t++;\n    var busy=!!document.querySelector('.btn.busy'), work=document.getElementById('led').classList.contains('on');\n    mood=busy?'busy':work?'work':'idle';\n    var maxX=window.innerWidth-W*size-4, fl=window.innerHeight-H*size-4;\n    if(feelT>0&&--feelT===0){feel='';go('sit',60);}\n    vy+=0.6; y+=vy;\n    if(y>=fl){y=fl;vy=0;on=true;}\n    var jx=0;\n    if(feel==='happy'){                                     // радость: хвост трубой, подпрыгивает, сердечки\n      legs='loaf';eyes='closed';tailUp=true;\n      if(on&&t%30===0){vy=-(7+Math.random()*3);on=false;fx(Math.random()<.5?'♥':'★');}\n    }else if(feel==='sad'){                                  // ошибка: шипит, шерсть серая, дрожит\n      legs='a';eyes='angry';tailUp=true;jx=(t%4<2?1:-1);\n    }else if(state==='walk'){\n      var sp=(mood==='idle'?1.1:1.8);\n      if(Math.abs(target-x)<=sp){go('sit',80+Math.random()*(mood==='idle'?260:90));}\n      else{dir=target>x?1:-1;x+=dir*sp;}\n      legs=(Math.floor(t/7)%2)?'a':'b';eyes=(t%190<8)?'closed':'open';tailUp=Math.floor(t/20)%2===0;\n    }else if(state==='sleep'){\n      legs='loaf';eyes='closed';tailUp=false;\n      if(t%80===0)fx('z');\n      if(mood!=='idle')go('sit',40);\n    }else{                                                   // сидит «булкой»: моргает, иногда машет хвостом\n      legs='loaf';eyes=(t%160<8)?'closed':'open';tailUp=(t%240)<30&&Math.floor(t/8)%2===0;\n      if(--stT<=0){\n        if(mood==='idle'&&t-lastAct>2400&&t-mouseT>1200)go('sleep');       // ~40 секунд тишины - засыпает\n        else{\n          var chase=mouseX>=0&&t-mouseT<240&&Math.random()<.6;             // идёт за курсором\n          target=Math.max(4,Math.min(maxX,chase?mouseX-W*size/2:4+Math.random()*maxX));go('walk');\n          if(Math.random()<.12&&on){vy=-9;on=false;}\n        }\n      }\n    }\n    if(x>maxX)x=maxX; if(x<4)x=4;\n    paint();\n    el.style.transform='translate('+Math.round(x+jx+(dir<0?W*size:0))+'px,'+Math.round(y)+'px) scale('+(dir*size).toFixed(2)+','+size.toFixed(2)+')';\n    requestAnimationFrame(step);\n  }\n  requestAnimationFrame(step);\n})();\n</script>\n</body></html>\n";
+var PANEL_HTML_ = "<!DOCTYPE html>\n<html><head><base target=\"_top\"><meta charset=\"utf-8\">\n<style>\n@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');\n:root{\n  --bg:#fff6e0; --panel:#ffffff; --line:#2a2d43; --text:#2a2d43; --mut:#6b7089;\n  --green:#5fd49a; --yellow:#ffd24a; --red:#ff8a7a; --blue:#6cb8ff; --cyan:#7fe3e0; --violet:#c4a5ff; --gray:#d9dde6;\n  --px:3px;\n}\n*{box-sizing:border-box;margin:0;padding:0}\nhtml,body{background:var(--bg);color:var(--text);font-family:Roboto,Arial,sans-serif;font-size:15px;line-height:1.25}\nbody{padding:10px 9px 24px}\n.wide{max-width:460px;margin:0 auto}\n.title{font-family:'Press Start 2P','Courier New',monospace;font-size:11px;color:var(--text);display:flex;align-items:center;gap:8px;margin:2px 2px 12px;letter-spacing:.5px}\nsvg{shape-rendering:crispEdges;display:block;flex:none}\n.pix{box-shadow:0 calc(var(--px)*-1) 0 0 var(--line),0 var(--px) 0 0 var(--line),calc(var(--px)*-1) 0 0 0 var(--line),var(--px) 0 0 0 var(--line)}\n.box{background:var(--panel);margin:var(--px);padding:9px 9px 10px}\n.status{margin-bottom:14px}\n.status h3{font-family:'Press Start 2P',monospace;font-size:8px;color:var(--text);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}\n.led{width:10px;height:10px;background:#b9bfce;display:inline-block;margin-right:6px;outline:2px solid var(--line)}\n.led.on{background:var(--green);animation:bl 1s steps(2) infinite}\n@keyframes bl{50%{background:#fff}}\n.bar{height:16px;background:var(--line);padding:3px;display:flex;gap:2px;margin:6px 0 8px}\n.bar i{flex:1;background:#4a4f6e}\n.bar i.f{background:var(--green)}\n.row{display:flex;justify-content:space-between;gap:8px;color:var(--mut);font-size:14px;margin-top:2px}\n.row b{color:var(--text);font-weight:700;text-align:right}\n.sec{margin:14px 0 0}\n.sec>.hd{cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 8px;margin:var(--px);color:var(--text);font-family:'Press Start 2P',monospace;font-size:9px;user-select:none}\n.sec>.hd .n{margin-left:auto;font-size:8px;opacity:.7}\n.sec>.hd .ar{width:9px;height:9px;background:currentColor;clip-path:polygon(0 0,100% 0,50% 100%)}\n.sec.closed>.hd .ar{clip-path:polygon(0 0,100% 50%,0 100%)}\n.sec.closed>.list{display:none}\n.list{padding:8px 3px 2px;display:grid;gap:9px}\n.btn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:9px;margin:var(--px);padding:9px 9px;background:var(--c,var(--blue));color:var(--text);font:700 15px/1.2 Roboto,Arial,sans-serif;\n  box-shadow:0 calc(var(--px)*-1) 0 0 var(--line),0 var(--px) 0 0 var(--line),calc(var(--px)*-1) 0 0 0 var(--line),var(--px) 0 0 0 var(--line),inset calc(var(--px)*-1) calc(var(--px)*-1) 0 0 rgba(42,45,67,.18),inset var(--px) var(--px) 0 0 rgba(255,255,255,.6)}\n.btn:hover{filter:brightness(1.06) saturate(1.1)}\n.btn:active,.btn.busy{box-shadow:0 calc(var(--px)*-1) 0 0 var(--line),0 var(--px) 0 0 var(--line),calc(var(--px)*-1) 0 0 0 var(--line),var(--px) 0 0 0 var(--line),inset var(--px) var(--px) 0 0 rgba(42,45,67,.22);transform:translate(2px,2px)}\n.btn.busy{pointer-events:none;filter:saturate(.6)}\n.btn.busy .t::after{content:' ...'}\n.btn .t{flex:1;text-align:left}\n.btn small{display:block;font-weight:400;font-size:13px;color:#454a66;margin-top:1px}\n.c-green{--c:var(--green)}.c-blue{--c:var(--blue)}.c-cyan{--c:var(--cyan)}.c-red{--c:var(--red)}.c-yellow{--c:var(--yellow)}.c-violet{--c:var(--violet)}.c-gray{--c:var(--gray)}\n.s1>.hd{background:var(--green)}.s2>.hd{background:var(--blue)}.s3>.hd{background:var(--yellow)}.s4>.hd{background:var(--violet)}.s5>.hd{background:var(--red)}.s6>.hd{background:var(--cyan)}.s7>.hd{background:var(--gray)}.s8>.hd{background:var(--gray)}\n.log{margin-top:14px;font-size:13px;color:var(--mut);max-height:120px;overflow:auto;white-space:pre-wrap}\n.log .e{color:#c0392b}.log .o{color:#1e8a55}\n.ver{margin-top:12px;text-align:center;color:#a9a48f;font-size:12px}\n\n.pet{display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:0}\n#pet-name{font-weight:700;cursor:pointer;border-bottom:2px dotted var(--mut)}\n#pet-name input{font:inherit;width:120px;border:2px solid var(--line);padding:1px 4px}\n#pet-lvl{color:var(--mut)}\n.fx{position:fixed;z-index:51;pointer-events:none;font-size:13px;font-weight:700;color:#2a2d43;white-space:nowrap;animation:fx 1s steps(8) forwards}\n@keyframes fx{to{transform:translateY(-46px);opacity:0}}\n#slime{position:fixed;left:0;top:0;width:54px;height:36px;z-index:50;cursor:pointer;will-change:transform;transform-origin:0 0}\n#slime svg{width:54px;height:36px;overflow:visible}\nbody{padding-bottom:64px}\n</style></head>\n<body><div class=\"wide\">\n<div class=\"title\"><svg id=\"logo\" width=\"24\" height=\"24\" viewBox=\"0 0 8 8\"></svg>АВТОМАТИЗАЦИЯ</div>\n\n<div class=\"box pix status\">\n  <h3><span><span class=\"led\" id=\"led\"></span>ПРОВЕРКА ИИ</span><span id=\"st-state\">...</span></h3>\n  <div class=\"bar\" id=\"bar\"></div>\n  <div class=\"row\"><span>Не проверено</span><b id=\"st-left\">-</b></div>\n  <div class=\"row\"><span>Потрачено</span><b id=\"st-cost\">-</b></div>\n  <div class=\"row\"><span>Ждут Sonnet</span><b id=\"st-son\">-</b></div>\n  <div class=\"row\"><span>Сегодня проверено</span><b id=\"st-day\">-</b></div>\n  <div class=\"row\"><span>Посл. порция</span><b id=\"st-last\" style=\"font-size:12px\">-</b></div>\n</div>\n\n<div class=\"box pix pet\"><span id=\"pet-name\" title=\"Нажмите, чтобы переименовать\"></span><span id=\"pet-lvl\"></span></div>\n<div id=\"app\"></div>\n<div class=\"log pix box\" id=\"log\" hidden></div>\n<div class=\"ver\" id=\"ver\"></div>\n\n</div><script>\n// ---- пиксельные иконки 8x8 ('#' = пиксель)\nvar IC = {\n  play:['..#.....','..##....','..###...','..####..','..###...','..##....','..#.....','........'],\n  stop:['........','.######.','.######.','.######.','.######.','.######.','.######.','........'],\n  chk:['........','......#.','.....##.','#...##..','##.##...','.###....','..#.....','........'],\n  box:['.######.','#......#','#.####.#','#......#','#......#','#......#','#......#','.######.'],\n  key:['..###...','.#...#..','.#...#..','..###...','...#....','...##...','...#....','...##...'],\n  send:['#.......','###.....','#####...','#######.','#####...','###.....','#.......','........'],\n  trash:['..####..','########','.#.##.#.','.#.##.#.','.#.##.#.','.#.##.#.','.######.','........'],\n  sort:['...#....','..###...','.#####..','...#....','...#....','.#####..','..###...','...#....'],\n  find:['..###...','.#...#..','#.....#.','#.....#.','.#...#..','..###.#.','.....###','......#.'],\n  print:['..####..','..#..#..','########','#......#','#..##..#','########','..#..#..','..####..'],\n  dl:['...##...','...##...','...##...','.######.','..####..','...##...','########','........'],\n  list:['#.######','........','#.######','........','#.######','........','#.######','........'],\n  star:['...##...','...##...','########','.######.','..####..','..#..#..','.#....#.','........']\n};\nfunction icon(name,color){\n  var m=IC[name]||IC.star,r='';\n  m.forEach(function(row,y){for(var x=0;x<8;x++)if(row[x]==='#')r+='<rect x=\"'+x+'\" y=\"'+y+'\" width=\"1\" height=\"1\"/>';});\n  return '<svg width=\"20\" height=\"20\" viewBox=\"0 0 8 8\" fill=\"'+(color||'#2a2d43')+'\">'+r+'</svg>';\n}\ndocument.getElementById('logo').innerHTML=(function(){var r='';IC.star.forEach(function(row,y){for(var x=0;x<8;x++)if(row[x]==='#')r+='<rect x=\"'+x+'\" y=\"'+y+'\" width=\"1\" height=\"1\" fill=\"#ffb300\"/>';});return r;})();\n\n// ---- разделы и кнопки: [название, функция, цвет, иконка, подпись]\nvar SECTIONS = [\n  {id:'s1', title:'1 СБОР', open:true, items:[\n    ['Статистика за сегодня','sobratStatistiku','green','chk'],\n    ['Выпулить крупные','vypulitKrupnye','green','dl','сумма от порога, лист «1800+»'],\n    ['Выпулить товары в «пул»','vypulitTovary','green','dl','товары из «Статистики»']\n  ]},\n  {id:'s2', title:'2 ПРОВЕРКА ИИ', open:true, items:[\n    ['Haiku 5.5 - проверить пул','proveritPulHaiku','blue','play','дёшево, сам разбирает ⚠'],\n    ['Sonnet 5.5 - проверить пул','proveritPulSonnet','blue','play','точнее, для остатка'],\n    ['Как идёт проверка','statusProverkiIi','cyan','list'],\n    ['Отсортировать пул','sortirovatPulKnopka','cyan','sort','✓ ≈ ⚠'],\n    ['Остановить проверку','ostanovitProverkuIi','red','stop']\n  ]},\n  {id:'s3', title:'3 ЛИДЫ НП', open:false, items:[\n    ['Перенести в «НП лиды»','perenestiVNpLidy','yellow','send','выделенные строки пула'],\n    ['Выпулить для Скайлаба','vypulitDlyaSkailab','yellow','box'],\n    ['Выпулить для Щербака','vypulitDlyaShcherbak','yellow','box'],\n    ['Создать ТТН','sozdatTtn','yellow','play','лиды без ТТН'],\n    ['Печать наклеек 100×100','pechatNakleek','yellow','print'],\n    ['Обновить статистику лидов','obnovitStatistikuNpLidov','cyan','list']\n  ]},\n  {id:'s4', title:'4 CRM', open:false, items:[\n    ['В «Заказы на СРМ»','perenestiVZakazyNaCrm','violet','send','для робота LP-CRM, с ТТН'],\n    ['Выпулить заказы в СРМ 1','otpravitVCrm1','violet','send'],\n    ['Выпулить заказы в СРМ 2','otpravitVCrm2','violet','send']\n  ]},\n  {id:'s5', title:'5 ДРОП И ТТН', open:false, items:[\n    ['Выгрузить дропу (TXT)','vygruzitDlyaDropa','red','dl','выделенные строки пула'],\n    ['Выпулить ТТН: «ОПТ ДРОП»','vypulitTtnOptDrop','red','list'],\n    ['Выпулить ТТН: «АВЕ ОПТ»','vypulitTtnAveOpt','red','list'],\n    ['Удалить ТТН','udalitTtn','red','trash','лист «ТТН на удаление»']\n  ]},\n  {id:'s6', title:'6 ПОСТАВЩИК И ЦЕНЫ', open:false, items:[\n    ['Пакет поставщику в Telegram','otpravitPaketTelegram','cyan','send','PDF: наклейки + фото + статистика'],\n    ['То же, но отдельными файлами','otpravitPaketRazdelno','gray','send','если склейка не сработала'],\n    ['Редактировать цены','redaktirovatTseny','cyan','star','«НП лиды»: истинная сумма по «Товары НП»'],\n    ['Каких фото не хватает','proveritFotoTovarov','gray','list','папка photos в GitHub']\n  ]},\n  {id:'s7', title:'7 РАСШИРЕНИЯ', open:false, items:[\n    ['Установить робот LP-CRM','ustanovitRasshirenieCrm','cyan','dl','расширение Chrome'],\n    ['Обновить скрипт таблицы','ustanovitSkriptTablitsy','cyan','dl','проверка версии и ссылка'],\n    ['Ссылка и код для робота','ssylkaDlyaRasshireniya','gray','key']\n  ]},\n  {id:'s8', title:'8 КЛЮЧИ', open:false, items:[\n    ['Ключ СРМ 1','ukazatKlyuchCrm1','gray','key'],\n    ['Выходной ключ СРМ 1','ukazatVyhodnoiKlyuchCrm1','gray','key','чтение заказов'],\n    ['Адрес и ключ СРМ 2','ukazatKlyuchCrm2','gray','key'],\n    ['Ключ Новой Почты','ukazatKlyuchNp','gray','key'],\n    ['Ключ НП из LP-CRM','ukazatKlyuchNpCrm','gray','key','удаление ТТН'],\n    ['Ключ OpenRouter','ukazatKlyuchOpenRouter','gray','key'],\n    ['Telegram: бот и чат','ukazatKlyuchTelegram','gray','key','для пакета поставщику']\n  ]}\n];\n\nvar app=document.getElementById('app');\nSECTIONS.forEach(function(s){\n  var d=document.createElement('div'); d.className='sec '+s.id+(s.open?'':' closed');\n  d.innerHTML='<div class=\"hd pix\"><i class=\"ar\"></i>'+s.title+'<span class=\"n\">'+s.items.length+'</span></div><div class=\"list\"></div>';\n  var list=d.querySelector('.list');\n  s.items.forEach(function(it){\n    var b=document.createElement('button'); b.className='btn c-'+it[2]; b.type='button';\n    b.innerHTML=icon(it[3])+'<span class=\"t\">'+it[0]+(it[4]?'<small>'+it[4]+'</small>':'')+'</span>';\n    b.onclick=function(){run(b,it[1],it[0]);};\n    list.appendChild(b);\n  });\n  d.querySelector('.hd').onclick=function(){d.classList.toggle('closed'); try{localStorage.setItem('zp_'+s.id,d.classList.contains('closed')?'0':'1');}catch(e){}};\n  try{var v=localStorage.getItem('zp_'+s.id); if(v==='1')d.classList.remove('closed'); else if(v==='0')d.classList.add('closed');}catch(e){}\n  app.appendChild(d);\n});\n\nvar logEl=document.getElementById('log');\nfunction log(msg,cls){logEl.hidden=false; var t=new Date(), p=function(n){return (n<10?'0':'')+n;};\n  logEl.insertAdjacentHTML('afterbegin','<div class=\"'+(cls||'')+'\">'+p(t.getHours())+':'+p(t.getMinutes())+' '+msg+'</div>');}\nfunction run(btn,fn,name){\n  if(btn.classList.contains('busy'))return;\n  btn.classList.add('busy');\n  google.script.run\n    .withSuccessHandler(function(){btn.classList.remove('busy'); log(name+' - готово','o'); if(window.pet)pet.hop(); refresh();})\n    .withFailureHandler(function(e){btn.classList.remove('busy'); log(name+': '+(e&&e.message||e),'e'); if(window.pet)pet.sad();})\n    [fn]();\n}\n\nvar prevIdet=null;\nfunction refresh(){\n  google.script.run.withSuccessHandler(function(d){\n    if(!d)return;\n    if(window.pet){ if(prevIdet===true&&!d.idet){ if(d.left===0)pet.happy(); else pet.sad(); } pet.day(d.day||0); } prevIdet=d.idet;\n    document.getElementById('st-day').textContent=d.day||0;\n    document.getElementById('st-son').textContent=d.sonnet||0;\n    document.getElementById('led').className='led'+(d.idet?' on':'');\n    document.getElementById('st-state').textContent=d.idet?d.model:'СТОП';\n    document.getElementById('st-left').textContent=d.left;\n    document.getElementById('st-cost').textContent='$'+d.cost.toFixed(2);\n    document.getElementById('st-last').textContent=d.last||'-';\n    document.getElementById('ver').textContent='v'+d.version;\n    var bar=document.getElementById('bar'),N=20,total=Math.max(d.total||0,d.left||0),done=total?Math.round((1-d.left/total)*N):0;\n    bar.innerHTML='';for(var i=0;i<N;i++)bar.insertAdjacentHTML('beforeend','<i class=\"'+(i<done?'f':'')+'\"></i>');\n  }).dannyePaneli();\n}\nrefresh(); setInterval(refresh,15000);\n\n// ---- кот: ходит по низу панели, садится «булкой», спит, идёт за курсором, реагирует на события, растёт с уровнем\n(function(){\n  var BASE=[\n    '............O...O.',\n    '...........OFO.OFO',\n    'O..........OFFOFFO',\n    'OO.........OFFFFFO',\n    '.O.........OEFFEFO',\n    '.OO........OFFPFFO',\n    '..OOOOOOOOOOCCCCO.',\n    '..OFFSFFSFFFFFFO..',\n    '..OFFFFFFFFFFFO...',\n    '..OFFFFFFFFFFO....'];\n  var LEGS={a:['..OFOFO..OFOFO....','..OO.OO..OO.OO....'],b:['...OFOFOOFOFO.....','...OO.OOOO.OO.....'],loaf:['..OFFFFFFFFFFO....','..OOOOOOOOOOOO....']};\n  var TAIL_UP=['O..','O..','OO.','.O.','.O.','.OO'];           // хвост трубой (строки 0-5)\n  var el=document.createElement('div'); el.id='slime';\n  var PAL={O:'#2a2d43',F:'#ffa94d',S:'#e8842a',P:'#ff8fa3',W:'#fff'};\n  var COLLAR={idle:'#5fd49a',work:'#6cb8ff',busy:'#ffd24a'};\n  var mood='idle',feel='',feelT=0,size=1,legs='loaf',tailUp=false,eyes='open',key='';\n  function paint(){\n    var k=[mood,feel,legs,tailUp,eyes].join('|'); if(k===key)return; key=k;\n    var rows=BASE.concat(LEGS[legs]).map(function(r,y){return (tailUp&&y<6)?TAIL_UP[y]+r.slice(3):((tailUp&&y===0)?r:r);});\n    if(tailUp)rows=rows.map(function(r,y){return y<6?TAIL_UP[y]+r.slice(3):r;});\n    var fur=feel==='sad'?'#c9cdd8':PAL.F, spot=feel==='sad'?'#9aa0b5':PAL.S, s='';\n    rows.forEach(function(r,y){for(var x=0;x<18;x++){var c=r[x],col=null;\n      if(c==='O')col=PAL.O;else if(c==='F')col=fur;else if(c==='S')col=spot;else if(c==='P')col=PAL.P;else if(c==='C')col=COLLAR[mood];\n      else if(c==='E')col=eyes==='open'?PAL.O:eyes==='angry'?'#e03131':spot;\n      if(col)s+='<rect x=\"'+x+'\" y=\"'+y+'\" width=\"1\" height=\"1\" fill=\"'+col+'\"/>';}});\n    if(eyes==='open')s+='<rect x=\"12\" y=\"4\" width=\".5\" height=\".5\" fill=\"#fff\"/><rect x=\"15\" y=\"4\" width=\".5\" height=\".5\" fill=\"#fff\"/>';\n    el.innerHTML='<svg viewBox=\"0 0 18 12\">'+s+'</svg>';\n  }\n  var W=54,H=36,x=30,y=-60,vy=0,dir=1,on=false,t=0,state='sit',stT=120,target=0,lastAct=0,mouseX=-1,mouseT=-9999;\n  function fx(ch){var s=document.createElement('div');s.className='fx';s.textContent=ch;s.style.left=(x+W*size/2-6+(Math.random()*24-12))+'px';s.style.top=(y-10)+'px';document.body.appendChild(s);setTimeout(function(){s.remove();},1000);}\n  // имя и уровень: растёт от числа проверенных за сегодня заказов (каждые 25 - уровень, до 10-го)\n  var nameEl=document.getElementById('pet-name'),lvlEl=document.getElementById('pet-lvl'),lvl=-1;\n  function petName(){try{return localStorage.getItem('zp_cat')||'Мурзик';}catch(e){return 'Мурзик';}}\n  nameEl.textContent=petName();\n  nameEl.onclick=function(){\n    if(nameEl.querySelector('input'))return;\n    var inp=document.createElement('input');inp.value=petName();inp.maxLength=14;nameEl.textContent='';nameEl.appendChild(inp);inp.focus();inp.select();\n    function done(){var v=inp.value.trim()||'Мурзик';try{localStorage.setItem('zp_cat',v);}catch(e){}nameEl.textContent=v;el.title=v;}\n    inp.onblur=done;inp.onkeydown=function(e){if(e.key==='Enter')inp.blur();};\n  };\n  function go(s,dur){state=s;stT=dur||0;}\n  window.pet={\n    happy:function(){feel='happy';feelT=420;lastAct=t;go('sit',9999);},\n    sad:function(){feel='sad';feelT=360;lastAct=t;go('sit',9999);fx('ш-ш!');},\n    hop:function(){if(!feel&&on){vy=-8;on=false;lastAct=t;if(state==='sleep')go('sit',80);}},\n    day:function(n){var L=Math.min(10,Math.floor(n/25));lvlEl.textContent='ур. '+L+(L<10?' · до след. '+(25-n%25):' · макс.');\n      if(L!==lvl){if(lvl>=0&&L>lvl){window.pet.happy();fx('★');}lvl=L;size=1+L*.07;}}\n  };\n  paint(); document.body.appendChild(el); el.title=petName();\n  el.onclick=function(){lastAct=t;if(on){vy=-11;on=false;}fx('мяу');if(state==='sleep')go('sit',100);};\n  document.addEventListener('mousemove',function(e){mouseX=e.clientX;mouseT=t;});\n  function step(){\n    t++;\n    var busy=!!document.querySelector('.btn.busy'), work=document.getElementById('led').classList.contains('on');\n    mood=busy?'busy':work?'work':'idle';\n    var maxX=window.innerWidth-W*size-4, fl=window.innerHeight-H*size-4;\n    if(feelT>0&&--feelT===0){feel='';go('sit',60);}\n    vy+=0.6; y+=vy;\n    if(y>=fl){y=fl;vy=0;on=true;}\n    var jx=0;\n    if(feel==='happy'){                                     // радость: хвост трубой, подпрыгивает, сердечки\n      legs='loaf';eyes='closed';tailUp=true;\n      if(on&&t%30===0){vy=-(7+Math.random()*3);on=false;fx(Math.random()<.5?'♥':'★');}\n    }else if(feel==='sad'){                                  // ошибка: шипит, шерсть серая, дрожит\n      legs='a';eyes='angry';tailUp=true;jx=(t%4<2?1:-1);\n    }else if(state==='walk'){\n      var sp=(mood==='idle'?1.1:1.8);\n      if(Math.abs(target-x)<=sp){go('sit',80+Math.random()*(mood==='idle'?260:90));}\n      else{dir=target>x?1:-1;x+=dir*sp;}\n      legs=(Math.floor(t/7)%2)?'a':'b';eyes=(t%190<8)?'closed':'open';tailUp=Math.floor(t/20)%2===0;\n    }else if(state==='sleep'){\n      legs='loaf';eyes='closed';tailUp=false;\n      if(t%80===0)fx('z');\n      if(mood!=='idle')go('sit',40);\n    }else{                                                   // сидит «булкой»: моргает, иногда машет хвостом\n      legs='loaf';eyes=(t%160<8)?'closed':'open';tailUp=(t%240)<30&&Math.floor(t/8)%2===0;\n      if(--stT<=0){\n        if(mood==='idle'&&t-lastAct>2400&&t-mouseT>1200)go('sleep');       // ~40 секунд тишины - засыпает\n        else{\n          var chase=mouseX>=0&&t-mouseT<240&&Math.random()<.6;             // идёт за курсором\n          target=Math.max(4,Math.min(maxX,chase?mouseX-W*size/2:4+Math.random()*maxX));go('walk');\n          if(Math.random()<.12&&on){vy=-9;on=false;}\n        }\n      }\n    }\n    if(x>maxX)x=maxX; if(x<4)x=4;\n    paint();\n    el.style.transform='translate('+Math.round(x+jx+(dir<0?W*size:0))+'px,'+Math.round(y)+'px) scale('+(dir*size).toFixed(2)+','+size.toFixed(2)+')';\n    requestAnimationFrame(step);\n  }\n  requestAnimationFrame(step);\n})();\n</script>\n</body></html>\n";
 /*PANEL_END*/
 
 /** Имя листа за сегодня, например «07.10.2026». */
@@ -1867,7 +1873,8 @@ var TTN_SETTINGS_ROWS = [
 ];
 
 var TTN_GOODS_HEADER = ['Товар (как в пуле)', 'Описание для накладной', 'Вес 1 шт, кг', 'Длина 1 шт, см',
-                        'Ширина 1 шт, см', 'Высота 1 шт, см', 'Скидка на заказ, грн', 'Название у поставщика', 'Поставщик', 'ID товара в СРМ'];
+                        'Ширина 1 шт, см', 'Высота 1 шт, см', 'Скидка на заказ, грн', 'Название у поставщика', 'Поставщик', 'ID товара в СРМ',
+                        'Истинная цена, грн', 'Акция / ПМ'];
 var GOODS_POSTAV_COL = 9;   // колонка I «Поставщик»
 var POSTAVSHCHIKI = ['Скайлаб', 'Щербак'];   // выпадающий список в колонке «Поставщик» листа «Товары НП»
 var TTN_FILL = '#fff2cc';     // жёлтым - ячейки, которые заполняете вы
@@ -1932,7 +1939,13 @@ function tovaryNp_() {
     var gde = /Статистика/.test(zag[8]) ? 8 : (zag[9] !== 'ID товара в СРМ' && /^Товар( \(|$)/.test(zag[10] || '') ? 10 : 0);
     if (gde) stary.getRange(1, gde, stary.getMaxRows(), 4).clearContent().setBackground(null).setFontWeight('normal').clearDataValidations();
   }
-  var sh = listTtn_(TTN_GOODS, TTN_GOODS_HEADER, [280, 220, 110, 110, 110, 110, 120, 260, 110, 110]);
+  if (stary && stary.getMaxColumns() >= 14) {   // до версии 3.4 статистика НП лидов стояла в L:N - теперь там цены и акции, статистика уехала правее
+    var zag2 = stary.getRange(1, 12, 1, 2).getValues()[0].map(String);
+    if (/^Товар/.test(zag2[0]) && zag2[1] === 'Заказов') stary.getRange(1, 12, stary.getMaxRows(), 3).clearContent().setBackground(null).setFontWeight('normal');
+  }
+  var sh = listTtn_(TTN_GOODS, TTN_GOODS_HEADER, [280, 220, 110, 110, 110, 110, 120, 260, 110, 110, 120, 170]);
+  sh.getRange(1, 11).setNote('Истинная (базовая) цена 1 шт. в вашем колл-центре, грн. По ней кнопка «Редактировать цены» проверяет суммы в «НП лидах».');
+  sh.getRange(1, 12).setNote('Как продаётся товар. Можно несколько вариантов через запятую:\n«1+1=3» - платят за 2, штук 3;\n«ПМ 99,149,199» - улучшенная модель дороже на эти суммы.\nПример: 1+1=3, ПМ 99,149');
   var est = {};
   if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().forEach(function (r) { est[klyuchTovara_(r[0])] = true; });
   var stats = ss.getSheetByName(ZAYAVKI_CFG.STATS_SHEET);
@@ -1952,7 +1965,7 @@ function tovaryNp_() {
       if (!key) return;
       out[key] = { opisanie: String(r[1]).trim(), ves: chislo_(r[2]), d: chislo_(r[3]), sh: chislo_(r[4]), v: chislo_(r[5]),
                    skidka: chislo_(r[6]), uPostav: String(r[7]).trim(), postav: String(r[8]).trim(),
-                   idCrm: String(r[9]).trim() };
+                   idCrm: String(r[9]).trim(), cena: chislo_(r[10]), akciya: String(r[11] || '').trim() };
     });
   }
   return out;
@@ -2473,7 +2486,7 @@ function otpravitTtnVCrm_(crm) {
 }
 
 /**
- * Статистика по листу «НП лиды» - справа в листе «Товары НП» (колонки I:K): товар, заказов, штук.
+ * Статистика по листу «НП лиды» - справа в листе «Товары НП» (колонки N:P): товар, заказов, штук.
  * Считается по всем строкам, которые сейчас лежат в «НП лидах» (товар - из колонки «Товар», штуки - из «Кол-во»).
  * Обновляется при каждой кнопке НП и отдельной кнопкой «Обновить статистику НП лидов».
  */
@@ -2482,12 +2495,162 @@ function statistikaNpLidov_() {
   var lidy = ss.getSheetByName(TTN_SHEET);
   var tov = ss.getSheetByName(TTN_GOODS);
   if (!lidy || !tov) return;
-  var col = TTN_GOODS_HEADER.length + 2;   // L (K - пустой разделитель после «ID товара в СРМ» в J)
-  var tovary = tovaryNp_();
+  var col = TTN_GOODS_HEADER.length + 2;   // N (после колонок товара A:L и пустого разделителя M)
+  var d = statDannyeNp_(null), rows = d.rows;
   if (tov.getMaxColumns() < col + 2) tov.insertColumnsAfter(tov.getMaxColumns(), col + 2 - tov.getMaxColumns());
+  tov.getRange(1, col - 1, tov.getMaxRows(), 4).clearContent().setBackground(null).setFontWeight('normal');   // M:P
+  tov.getRange(1, col, 1, 3).setValues([['Товар' + (d.period ? ' (ТТН ' + d.period + ')' : ''), 'Заказов', 'Штук']])
+    .setFontWeight('bold').setBackground(TTN_HEAD).setWrap(true);
+  if (rows.length) tov.getRange(2, col, rows.length, 3).setValues(rows);
+  tov.getRange(rows.length + 2, col, 1, 3).setValues([['Итого', d.zakazov, d.shtuk]]).setFontWeight('bold');
+  tov.setColumnWidth(col, 280); tov.setColumnWidth(col + 1, 80); tov.setColumnWidth(col + 2, 80);
+}
+
+function obnovitStatistikuNpLidov() {
+  tovaryNp_();
+  statistikaNpLidov_();
+  SpreadsheetApp.getActive().toast('Статистика «НП лиды» обновлена (лист «' + TTN_GOODS + '», колонки N:P).', TTN_GOODS, 6);
+}
+
+/* ===================== Поставщик и цены (раздел 6 панели) =====================
+ * 1. «Пакет поставщику в Telegram»: один PDF = наклейки НП по ТТН из «НП лидов» + фото товаров + страница
+ *    «товар / заказов / штук / итого». Фото лежат в GitHub, в папке UPDATE_CFG.PHOTO_DIR, файл называется
+ *    так же, как товар в колонке «Название у поставщика» листа «Товары НП» (jpg или png).
+ * 2. «Редактировать цены»: в «НП лидах» подбирает истинную сумму по колонкам K «Истинная цена» и
+ *    L «Акция / ПМ» листа «Товары НП» с учётом «Скидки на заказ».
+ */
+
+// ---------- Telegram ----------
+function tgNastroiki_() {
+  var p = PropertiesService.getScriptProperties();
+  return { token: p.getProperty('TG_TOKEN') || '', chat: p.getProperty('TG_CHAT_ID') || '' };
+}
+
+/** Вызов Telegram Bot API. Ошибку превращает в понятный текст (токен в текст не попадает). */
+function tgVyzov_(method, payload) {
+  var n = tgNastroiki_();
+  if (!n.token || !n.chat) throw new Error('Не указан Telegram: панель -> «Ключи» -> «Telegram: бот и чат».');
+  payload.chat_id = n.chat;
+  var resp = UrlFetchApp.fetch('https://api.telegram.org/bot' + n.token + '/' + method,
+    { method: 'post', payload: payload, muteHttpExceptions: true });
+  var j = {};
+  try { j = JSON.parse(resp.getContentText()); } catch (e) {}
+  if (!j.ok) throw new Error('Telegram: ' + (j.description || ('код ' + resp.getResponseCode())));
+  return j;
+}
+
+function tgOtpravitFail_(blob, podpis) {
+  return tgVyzov_('sendDocument', { caption: String(podpis || '').slice(0, 1000), document: blob });
+}
+
+function ukazatKlyuchTelegram() {
+  var ui = SpreadsheetApp.getUi();
+  var t = ui.prompt('Telegram: токен бота', 'Токен от @BotFather (вида 123456:AA...):', ui.ButtonSet.OK_CANCEL);
+  if (t.getSelectedButton() !== ui.Button.OK || !t.getResponseText().trim()) return;
+  var c = ui.prompt('Telegram: куда слать',
+    'ID чата. Для «Избранного»/личных сообщений - ваш числовой ID (узнать: бот @userinfobot; сначала нажмите Start у своего бота). ' +
+    'Для канала - его ID вида -100..., бот должен быть админом канала.', ui.ButtonSet.OK_CANCEL);
+  if (c.getSelectedButton() !== ui.Button.OK || !c.getResponseText().trim()) return;
+  var p = PropertiesService.getScriptProperties();
+  p.setProperty('TG_TOKEN', t.getResponseText().trim());
+  p.setProperty('TG_CHAT_ID', c.getResponseText().trim());
+  try {
+    tgVyzov_('sendMessage', { text: '✅ Таблица подключена к Telegram' });
+    ui.alert('Готово', 'Сохранено. В чат отправлено тестовое сообщение.', ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('Сохранено, но тестовое сообщение не дошло', e.message, ui.ButtonSet.OK);
+  }
+}
+
+// ---------- Фото товаров из GitHub ----------
+function normFoto_(s) {
+  return String(s || '').replace(/\.(jpe?g|png|webp)$/i, '').toLowerCase().replace(/[^a-zа-яіїєґ0-9]+/g, '');
+}
+
+/** Размер и тип картинки по байтам (jpg/png); null - формат не поддерживается. */
+function razmerKartinki_(b) {
+  function u(i) { return b[i] & 255; }
+  if (b.length > 24 && u(0) === 0x89 && u(1) === 0x50 && u(2) === 0x4E && u(3) === 0x47) {
+    return { mime: 'image/png', w: ((u(16) << 24) | (u(17) << 16) | (u(18) << 8) | u(19)) >>> 0,
+             h: ((u(20) << 24) | (u(21) << 16) | (u(22) << 8) | u(23)) >>> 0 };
+  }
+  if (b.length > 4 && u(0) === 0xFF && u(1) === 0xD8) {
+    var i = 2;
+    while (i + 9 < b.length) {
+      if (u(i) !== 0xFF) { i++; continue; }
+      var m = u(i + 1);
+      if (m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7) || m === 0xFF) { i += (m === 0xFF ? 1 : 2); continue; }
+      var len = (u(i + 2) << 8) | u(i + 3);
+      if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) {
+        return { mime: 'image/jpeg', h: (u(i + 5) << 8) | u(i + 6), w: (u(i + 7) << 8) | u(i + 8) };
+      }
+      i += 2 + len;
+    }
+  }
+  return null;
+}
+
+/** Фото для списка названий: {название: {bytes, mime, w, h} | null}. Сначала прямые ссылки raw, потом список папки через API GitHub. */
+function fotoTovarov_(names) {
+  var repo = UPDATE_CFG.REPO, dir = UPDATE_CFG.PHOTO_DIR || 'photos';
+  var out = {};
+  if (!repo) return out;
+  var base = 'https://raw.githubusercontent.com/' + repo + '/main/' + dir + '/';
+  var exts = ['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG'];
+  function skachat(urls) {
+    var res = [];
+    for (var i = 0; i < urls.length; i += 40) {
+      var part = urls.slice(i, i + 40).map(function (u) { return { url: u, muteHttpExceptions: true }; });
+      var r; try { r = UrlFetchApp.fetchAll(part); } catch (e) { r = part.map(function () { return null; }); }
+      res = res.concat(r);
+    }
+    return res;
+  }
+  function prinyat(name, resp) {
+    if (!resp || resp.getResponseCode() !== 200) return false;
+    var bytes = resp.getContent(), sz = razmerKartinki_(bytes);
+    if (!sz || !sz.w || !sz.h) return false;
+    out[name] = { bytes: bytes, mime: sz.mime, w: sz.w, h: sz.h };
+    return true;
+  }
+  var reqs = [], who = [];
+  names.forEach(function (n) { exts.forEach(function (e) { reqs.push(base + encodeURIComponent(n) + e); who.push(n); }); });
+  skachat(reqs).forEach(function (resp, i) { if (!out[who[i]]) prinyat(who[i], resp); });
+  var net = names.filter(function (n) { return !out[n]; });
+  if (net.length) {   // имя файла чуть отличается (регистр, знаки) - ищем по списку папки
+    try {
+      var l = UrlFetchApp.fetch('https://api.github.com/repos/' + repo + '/contents/' + dir.split('/').map(encodeURIComponent).join('/'),
+        { muteHttpExceptions: true, headers: { 'User-Agent': 'zayavki-script', 'Accept': 'application/vnd.github+json' } });
+      if (l.getResponseCode() === 200) {
+        var idx = {};
+        JSON.parse(l.getContentText()).forEach(function (f) {
+          if (f.type === 'file' && /\.(jpe?g|png)$/i.test(f.name) && f.download_url) idx[normFoto_(f.name)] = f.download_url;
+        });
+        var urls = [], kto = [];
+        net.forEach(function (n) { var u = idx[normFoto_(n)]; if (u) { urls.push(u); kto.push(n); } });
+        skachat(urls).forEach(function (resp, i) { prinyat(kto[i], resp); });
+      }
+    } catch (e) {}
+  }
+  names.forEach(function (n) { if (!out[n]) out[n] = null; });
+  return out;
+}
+
+// ---------- Данные пакета ----------
+/**
+ * Статистика по строкам «НП лидов»: товар (название у поставщика), заказов, штук.
+ * vybor - номера строк листа (с 2) или null - все строки. Считаются строки с Call ID.
+ */
+function statDannyeNp_(vybor) {
+  var ss = SpreadsheetApp.getActive();
+  var lidy = ss.getSheetByName(TTN_SHEET);
+  var tovary = tovaryNp_();
   var stats = {}, poryadok = [], zakazov = 0, shtuk = 0, daty = [];
-  if (lidy.getLastRow() > 1) {
-    lidy.getRange(2, 1, lidy.getLastRow() - 1, TTN_COLUMNS.length).getValues().forEach(function (r) {
+  var nuzhny = null;
+  if (vybor) { nuzhny = {}; vybor.forEach(function (n) { nuzhny[n] = true; }); }
+  if (lidy && lidy.getLastRow() > 1) {
+    lidy.getRange(2, 1, lidy.getLastRow() - 1, TTN_COLUMNS.length).getValues().forEach(function (r, i) {
+      if (nuzhny && !nuzhny[i + 2]) return;
       if (!String(r[TC_('Call ID')]).trim()) return;
       var items = razobratTovary_(r[TC_('Товар')]);
       var name = items.length ? items[0].name : String(r[TC_('Товар')] || '').trim() || '(без товара)';
@@ -2508,19 +2671,272 @@ function statistikaNpLidov_() {
   var sortD = daty.map(function (d) { return d.split('.').reverse().join(''); }).sort();
   var period = sortD.length ? [sortD[0], sortD[sortD.length - 1]].map(function (k) {
     return k.slice(6, 8) + '.' + k.slice(4, 6) + '.' + k.slice(0, 4); }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(' - ') : '';
-
-  tov.getRange(1, col - 1, tov.getMaxRows(), 4).clearContent().setBackground(null).setFontWeight('normal');   // K:N
-  tov.getRange(1, col, 1, 3).setValues([['Товар' + (period ? ' (ТТН ' + period + ')' : ''), 'Заказов', 'Штук']])
-    .setFontWeight('bold').setBackground(TTN_HEAD).setWrap(true);
-  if (rows.length) tov.getRange(2, col, rows.length, 3).setValues(rows);
-  tov.getRange(rows.length + 2, col, 1, 3).setValues([['Итого', zakazov, shtuk]]).setFontWeight('bold');
-  tov.setColumnWidth(col, 280); tov.setColumnWidth(col + 1, 80); tov.setColumnWidth(col + 2, 80);
+  return { rows: rows, zakazov: zakazov, shtuk: shtuk, period: period };
 }
 
-function obnovitStatistikuNpLidov() {
-  tovaryNp_();
-  statistikaNpLidov_();
-  SpreadsheetApp.getActive().toast('Статистика «НП лиды» обновлена (лист «' + TTN_GOODS + '», колонки L:N).', TTN_GOODS, 6);
+/** Что отправлять: выделенные строки «НП лидов» с ТТН, а если ничего не выделено - все строки с ТТН. */
+function dannyePaketa_() {
+  var ss = SpreadsheetApp.getActive();
+  var sh = listNpLidy_();
+  if (sh.getLastRow() < 2) throw new Error('Лист «' + TTN_SHEET + '» пуст.');
+  var rows = sh.getRange(2, 1, sh.getLastRow() - 1, TTN_COLUMNS.length).getValues();
+  var vybor = ss.getActiveSheet().getName() === TTN_SHEET ? vydelennyeStroki_(sh) : [];
+  var vse = [], vydel = [];
+  rows.forEach(function (r, i) {
+    if (!String(r[TC_('ТТН')]).trim() || !String(r[TC_('Call ID')]).trim()) return;
+    vse.push(i + 2);
+    if (vybor.indexOf(i + 2) >= 0) vydel.push(i + 2);
+  });
+  var nomera = vydel.length ? vydel : vse;
+  if (!nomera.length) throw new Error('В «' + TTN_SHEET + '» нет строк с ТТН. Сначала «Создать ТТН».');
+  var ttn = nomera.map(function (n) { return String(rows[n - 2][TC_('ТТН')]).replace(/\D/g, ''); })
+    .filter(function (t, i, a) { return t && a.indexOf(t) === i; });
+  return { ttn: ttn, stroki: nomera, stat: statDannyeNp_(nomera), vydeleno: vydel.length > 0 };
+}
+
+/** PDF наклеек НП 100x100 по номерам ТТН: массив байтовых массивов (по 100 ТТН на запрос - ограничение длины ссылки). */
+function pdfNakleekNp_(ttn) {
+  var key = PropertiesService.getScriptProperties().getProperty('NP_KEY');
+  if (!key) throw new Error('Укажите ключ: панель -> «Ключи» -> «Ключ Новой Почты».');
+  var reqs = [];
+  for (var i = 0; i < ttn.length; i += 100) {
+    reqs.push({ url: 'https://my.novaposhta.ua/orders/printMarking100x100/orders/' + ttn.slice(i, i + 100).join(',') +
+                '/type/pdf/zebra/zebra/apiKey/' + encodeURIComponent(key), muteHttpExceptions: true });
+  }
+  var resps = UrlFetchApp.fetchAll(reqs);
+  return resps.map(function (r, k) {
+    var b = r.getContent();
+    if (r.getResponseCode() !== 200 || b.length < 5 || String.fromCharCode(b[0] & 255, b[1] & 255, b[2] & 255, b[3] & 255) !== '%PDF') {
+      throw new Error('Новая Почта не вернула PDF наклеек (часть ' + (k + 1) + ', код ' + r.getResponseCode() + '). Проверьте ключ НП и номера ТТН.');
+    }
+    return b;
+  });
+}
+
+function esc_(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+/** Страницы «фото + статистика» одним PDF (из HTML). Без украшений: фото с подписью и таблица. */
+function pdfFotoStatistika_(foto, paket) {
+  var st = paket.stat;
+  var h = '<html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;font-size:12pt;color:#000}' +
+    'table.t{border-collapse:collapse;width:100%}table.t td,table.t th{border:1px solid #000;padding:6px 8px;text-align:left}' +
+    'table.t td.n,table.t th.n{text-align:right;width:80px}td.f{text-align:center;vertical-align:top;padding:6px 6px 14px 6px;width:50%}' +
+    '.c{font-size:11pt;margin-top:4px}</style></head><body>';
+  var imena = st.rows.map(function (r) { return r[0]; }).filter(function (n) { return foto[n]; });
+  for (var i = 0; i < imena.length; i += 4) {
+    h += '<table style="width:100%;border-collapse:collapse">';
+    for (var r = 0; r < 2; r++) {
+      h += '<tr>';
+      for (var c = 0; c < 2; c++) {
+        var n = imena[i + r * 2 + c];
+        if (!n) { h += '<td class="f"></td>'; continue; }
+        var f = foto[n], k = Math.min(250 / f.w, 290 / f.h, 1);
+        h += '<td class="f"><img src="data:' + f.mime + ';base64,' + Utilities.base64Encode(f.bytes) + '" width="' + Math.round(f.w * k) +
+             '" height="' + Math.round(f.h * k) + '"><div class="c">' + esc_(n) + '</div></td>';
+      }
+      h += '</tr>';
+    }
+    h += '</table><div style="page-break-after:always"></div>';
+  }
+  h += '<div><b>Товары (ТТН ' + esc_(st.period || Utilities.formatDate(new Date(), ZAYAVKI_CFG.TZ, 'dd.MM.yyyy')) + ')</b></div><br>' +
+       '<table class="t"><tr><th>Товар</th><th class="n">Заказов</th><th class="n">Штук</th></tr>';
+  st.rows.forEach(function (r) { h += '<tr><td>' + esc_(r[0]) + '</td><td class="n">' + r[1] + '</td><td class="n">' + r[2] + '</td></tr>'; });
+  h += '<tr><td><b>Итого</b></td><td class="n"><b>' + st.zakazov + '</b></td><td class="n"><b>' + st.shtuk + '</b></td></tr></table></body></html>';
+  return Utilities.newBlob(h, 'text/html', 'paket.html').getAs('application/pdf');
+}
+
+/** pdf-lib (склейка PDF). Грузится с CDN при первом вызове; setTimeout в Apps Script нет - подставляем синхронный. */
+function pdfLib_() {
+  if (typeof PDFLib !== 'undefined') return PDFLib;
+  if (typeof setTimeout === 'undefined') globalThis.setTimeout = function (f) { f(); return 0; };
+  var code = UrlFetchApp.fetch('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js').getContentText();
+  (0, eval)(code);
+  if (typeof PDFLib === 'undefined') throw new Error('pdf-lib не загрузился');
+  return PDFLib;
+}
+
+/** Склеивает PDF (массив байтовых массивов) по порядку. Возвращает Uint8Array. */
+async function sklitPdf_(chasti) {
+  var L = pdfLib_();
+  var out = await L.PDFDocument.create();
+  for (var i = 0; i < chasti.length; i++) {
+    var src = await L.PDFDocument.load(new Uint8Array(chasti[i]));
+    var pages = await out.copyPages(src, src.getPageIndices());
+    pages.forEach(function (p) { out.addPage(p); });
+  }
+  return await out.save();
+}
+
+function podpisPaketa_(paket) {
+  var den = paket.stat.period || Utilities.formatDate(new Date(), ZAYAVKI_CFG.TZ, 'dd.MM.yyyy');
+  return 'ТТН ' + den + ': наклеек ' + paket.ttn.length + ', заказов ' + paket.stat.zakazov + ', штук ' + paket.stat.shtuk;
+}
+
+/** Общая подготовка: данные, наклейки НП, фото, страницы фото+статистика. null - пользователь отказался. */
+function sobratPaket_() {
+  var ss = SpreadsheetApp.getActive(), ui = SpreadsheetApp.getUi();
+  var n = tgNastroiki_();
+  if (!n.token || !n.chat) throw new Error('Сначала укажите Telegram: панель -> «Ключи» -> «Telegram: бот и чат».');
+  var paket = dannyePaketa_();
+  ss.toast('ТТН: ' + paket.ttn.length + '. Скачиваю наклейки и фото...', 'Пакет поставщику', 20);
+  var foto = fotoTovarov_(paket.stat.rows.map(function (r) { return r[0]; }));
+  var netFoto = Object.keys(foto).filter(function (k) { return !foto[k]; });
+  if (netFoto.length && ui.alert('Нет фото для товаров (' + netFoto.length + ')',
+      netFoto.join('\n') + '\n\nФайл называется как в «Название у поставщика», лежит в папке «' + (UPDATE_CFG.PHOTO_DIR || 'photos') +
+      '» репозитория GitHub (jpg/png). Отправить без этих фото?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return null;
+  paket.nakleiki = pdfNakleekNp_(paket.ttn);
+  paket.extra = pdfFotoStatistika_(foto, paket);
+  paket.netFoto = netFoto;
+  paket.imya = 'TTN_' + (paket.stat.period || Utilities.formatDate(new Date(), ZAYAVKI_CFG.TZ, 'dd.MM.yyyy')).replace(/\s/g, '') + '.pdf';
+  return paket;
+}
+
+/** Кнопка «Пакет поставщику в Telegram»: ОДИН PDF (наклейки + фото + статистика). */
+function otpravitPaketTelegram() {
+  var paket = sobratPaket_();
+  if (!paket) return;
+  zavershitPaket_(paket);   // асинхронная склейка; результат покажет сама (тост или окно)
+}
+
+async function zavershitPaket_(paket) {
+  var ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive();
+  try {
+    var chasti = paket.nakleiki.concat([paket.extra.getBytes()]);
+    var razmer = chasti.reduce(function (s, b) { return s + b.length; }, 0);
+    if (razmer > 40 * 1024 * 1024) throw new Error('файл больше 40 МБ - Telegram не примет одним файлом');
+    var u8 = await sklitPdf_(chasti);
+    var blob = Utilities.newBlob(Array.from(u8), 'application/pdf', paket.imya);
+    tgOtpravitFail_(blob, podpisPaketa_(paket));
+    ss.toast('Отправлено в Telegram: ' + podpisPaketa_(paket), 'Пакет поставщику', 10);
+  } catch (e) {
+    ui.alert('Одним файлом не вышло: ' + e.message + '\n\nНажмите «То же, но отдельными файлами» - наклейки и фото со статистикой уйдут двумя PDF.');
+  }
+}
+
+/** Запасной вариант: два файла (наклейки НП; фото + статистика) без склейки. */
+function otpravitPaketRazdelno() {
+  var paket = sobratPaket_();
+  if (!paket) return;
+  var p = podpisPaketa_(paket);
+  paket.nakleiki.forEach(function (b, i) {
+    tgOtpravitFail_(Utilities.newBlob(b, 'application/pdf', 'TTN_naklejki' + (paket.nakleiki.length > 1 ? '_' + (i + 1) : '') + '.pdf'), p);
+  });
+  tgOtpravitFail_(paket.extra.setName('foto_i_statistika.pdf'), 'Фото и статистика. ' + p);
+  SpreadsheetApp.getActive().toast('Отправлено в Telegram (' + (paket.nakleiki.length + 1) + ' файла): ' + p, 'Пакет поставщику', 10);
+}
+
+/** Какие товары из статистики «НП лидов» без фото в GitHub. */
+function proveritFotoTovarov() {
+  var ui = SpreadsheetApp.getUi();
+  var st = statDannyeNp_(null);
+  if (!st.rows.length) { ui.alert('В «' + TTN_SHEET + '» нет товаров.'); return; }
+  var foto = fotoTovarov_(st.rows.map(function (r) { return r[0]; }));
+  var net = Object.keys(foto).filter(function (k) { return !foto[k]; });
+  ui.alert(net.length ? 'Нет фото (' + net.length + ' из ' + st.rows.length + '):\n\n' + net.join('\n') +
+           '\n\nЗагрузите в папку «' + (UPDATE_CFG.PHOTO_DIR || 'photos') + '» репозитория ' + UPDATE_CFG.REPO + ' файлы с такими именами (jpg/png).'
+         : 'Фото есть у всех товаров (' + st.rows.length + ').');
+}
+
+// ---------- Истинные цены ----------
+/**
+ * Колонка L «Акция / ПМ»: «1+1=3» (платят за 2, штук 3) и/или «ПМ 99,149,199» (улучшенная модель дороже на эти суммы).
+ * Любой текст: число-акция вида a+b=c распознаётся, остальные числа от 10 - суммы ПМ.
+ */
+function razobratAkciyu_(text) {
+  var t = String(text || ''), out = { gruppa: 0, platit: 0, pm: [] };
+  var m = t.match(/(\d+)\s*\+\s*(\d+)\s*=\s*(\d+)/);
+  if (m) {
+    var platit = parseInt(m[1], 10) + parseInt(m[2], 10), gruppa = parseInt(m[3], 10);
+    if (platit > 0 && gruppa > platit) { out.platit = platit; out.gruppa = gruppa; }
+    t = t.replace(m[0], ' ');
+  }
+  (t.match(/\d+/g) || []).forEach(function (s) {
+    var n = parseInt(s, 10);
+    if (n >= 10 && out.pm.indexOf(n) < 0) out.pm.push(n);
+  });
+  out.pm.sort(function (a, b) { return a - b; });
+  return out;
+}
+
+/**
+ * Возможные суммы заказа. items: [{cena, kol, ak}] (ak - из razobratAkciyu_). Первая - базовая (без ПМ).
+ */
+function variantySummy_(items) {
+  var baza = 0, pm = [], akciya = false;
+  items.forEach(function (it) {
+    var platit = it.kol;
+    if (it.ak.gruppa > it.ak.platit && it.ak.platit > 0) {
+      platit = Math.floor(it.kol / it.ak.gruppa) * it.ak.platit + (it.kol % it.ak.gruppa);
+      if (platit < it.kol) akciya = true;
+    }
+    baza += it.cena * platit;
+    it.ak.pm.forEach(function (a) { if (pm.indexOf(a) < 0) pm.push(a); });
+  });
+  pm.sort(function (a, b) { return a - b; });
+  var v = [{ summa: baza, tip: akciya ? 'база, акция 1+1=3' : 'база' }];
+  pm.forEach(function (a) { v.push({ summa: baza + a, tip: 'ПМ +' + a }); });
+  return v;
+}
+
+/**
+ * Выбор суммы. nablyud - сумма, которая стоит сейчас в заказе (до скидки). Возвращает {summa, tip, uroven}:
+ * uroven: 'tochno' (совпала), 'pohozhe' (близко к варианту), 'daleko' (далеко - проверить), 'musor' (сумма слишком мала - взята база), 'netsummy'.
+ */
+function vyibratSummu_(nablyud, items) {
+  var v = variantySummy_(items), baza = v[0].summa;
+  if (!(nablyud > 0)) return { summa: baza, tip: v[0].tip, uroven: 'netsummy', varianty: v };
+  if (nablyud < baza * 0.5) return { summa: baza, tip: v[0].tip, uroven: 'musor', varianty: v };
+  var best = v[0], d = Math.abs(v[0].summa - nablyud);
+  v.forEach(function (x) { var dd = Math.abs(x.summa - nablyud); if (dd < d - 0.001) { d = dd; best = x; } });
+  var uroven = d <= Math.max(5, best.summa * 0.03) ? 'tochno' : d <= best.summa * 0.15 ? 'pohozhe' : 'daleko';
+  return { summa: best.summa, tip: best.tip, uroven: uroven, varianty: v };
+}
+
+/** Кнопка «Редактировать цены»: «НП лиды» без ТТН -> Наложка = истинная сумма − скидка. Было - в примечании ячейки. */
+function redaktirovatTseny() {
+  var ss = SpreadsheetApp.getActive(), ui = SpreadsheetApp.getUi();
+  var sh = listNpLidy_();
+  if (sh.getLastRow() < 2) { ui.alert('Лист «' + TTN_SHEET + '» пуст.'); return; }
+  var tovary = tovaryNp_();
+  if (!Object.keys(tovary).some(function (k) { return tovary[k].cena > 0; })) {
+    ui.alert('В листе «' + TTN_GOODS + '» не заполнена колонка K «Истинная цена, грн». Впишите цены товаров (и в L - «1+1=3» / «ПМ 99,149,199»).');
+    return;
+  }
+  var n = sh.getLastRow() - 1, cN = TC_('Наложка') + 1;
+  var rows = sh.getRange(2, 1, n, TTN_COLUMNS.length).getValues();
+  var cell = sh.getRange(2, cN, n, 1);
+  var vals = cell.getValues(), notes = cell.getNotes(), bg = cell.getBackgrounds();
+  var izm = 0, ok = 0, bezCeny = {}, sTtn = 0, slabye = 0;
+  rows.forEach(function (r, i) {
+    if (!String(r[TC_('Call ID')]).trim()) return;
+    if (String(r[TC_('ТТН')]).trim()) { sTtn++; return; }   // ТТН уже создана с этой суммой - не трогаем
+    var items = razobratTovary_(r[TC_('Товар')]);
+    if (!items.length) return;
+    var kol = chislo_(r[TC_('Кол-во')]) || items[0].qty || 1, list = [], netCeny = null;
+    items.forEach(function (it, k) {
+      var t = tovary[klyuchTovara_(it.name)];
+      if (!t || !(t.cena > 0)) { netCeny = netCeny || it.name; return; }
+      list.push({ cena: t.cena, kol: k === 0 ? kol : it.qty, ak: razobratAkciyu_(t.akciya) });
+    });
+    if (netCeny) { bezCeny[netCeny] = (bezCeny[netCeny] || 0) + 1; bg[i][0] = '#f4cccc'; notes[i][0] = 'Нет истинной цены у товара «' + netCeny + '» (лист «' + TTN_GOODS + '», колонка K).'; return; }
+    var t0 = tovary[klyuchTovara_(items[0].name)];
+    var skidka = (t0 && t0.skidka) || 0, teper = chislo_(vals[i][0]);
+    var nablyud = teper > 0 ? teper + skidka : 0;
+    var res = vyibratSummu_(nablyud, list), nova = Math.max(res.summa - skidka, 0);
+    var tekst = 'Было: ' + teper + (skidka ? ' (+ скидка ' + skidka + ' = ' + nablyud + ')' : '') + '\nСтало: ' + res.summa + (skidka ? ' − ' + skidka + ' = ' + nova : '') +
+      '\nВариант: ' + res.tip + (res.uroven === 'musor' ? ' (сумма в заказе слишком мала - взята база)' : res.uroven === 'netsummy' ? ' (суммы не было)' :
+      res.uroven === 'daleko' ? ' (далеко от всех вариантов - проверьте)' : '') + '\nВарианты: ' + res.varianty.map(function (x) { return x.summa + ' (' + x.tip + ')'; }).join(', ');
+    if (nova !== teper) { vals[i][0] = nova; izm++; notes[i][0] = tekst; } else { ok++; if (res.uroven !== 'tochno') notes[i][0] = tekst; }
+    bg[i][0] = res.uroven === 'daleko' ? '#f4cccc' : (res.uroven === 'musor' || res.uroven === 'netsummy') ? '#fce5cd' : (nova !== teper ? '#d9ead3' : bg[i][0]);
+    if (res.uroven === 'daleko' || res.uroven === 'musor' || res.uroven === 'netsummy') slabye++;
+  });
+  cell.setValues(vals); cell.setNotes(notes); cell.setBackgrounds(bg);
+  var netKeys = Object.keys(bezCeny);
+  ui.alert('Цены в «' + TTN_SHEET + '»',
+    'Изменено: ' + izm + '\nУже верные: ' + ok + '\nСомнительные (оранжевым/красным, смотрите примечание): ' + slabye +
+    (sTtn ? '\nПропущено, ТТН уже создана: ' + sTtn : '') +
+    (netKeys.length ? '\n\nНет истинной цены у товаров:\n' + netKeys.map(function (k) { return k + ' - ' + bezCeny[k] + ' зак.'; }).join('\n') : ''),
+    ui.ButtonSet.OK);
 }
 
 // ======================= ТТН дроп-заказов: выпул из CRM и удаление в НП =======================
