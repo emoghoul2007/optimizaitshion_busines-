@@ -113,7 +113,7 @@ function pokazatMenuZayavki() {
  */
 var UPDATE_CFG = {
   REPO: 'emoghoul2007/optimizaitshion_busines-',                 // например 'oleg/zayavki' - впишите после создания репозитория
-  SCRIPT_VERSION: '3.4.2',
+  SCRIPT_VERSION: '3.4.3',
   PHOTO_DIR: 'photos'            // папка с фото товаров в репозитории (для «Пакета поставщику»)
 };
 
@@ -2712,6 +2712,13 @@ function pdfNakleekNp_(ttn) {
   });
 }
 
+/** Имя файла латиницей: Telegram теряет кириллицу в имени файла (приходит просто «jpg»). */
+function latinitsa_(s) {
+  var m = { а:'a',б:'b',в:'v',г:'h',ґ:'g',д:'d',е:'e',є:'ye',ж:'zh',з:'z',и:'y',і:'i',ї:'yi',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'kh',ц:'ts',ч:'ch',ш:'sh',щ:'shch',ь:'',ъ:'',ы:'y',э:'e',ю:'yu',я:'ya' };
+  return String(s).toLowerCase().replace(/[а-яіїєґ]/g, function (c) { return m[c] || ''; })
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'foto';
+}
+
 function esc_(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
 /** Статистика обычным текстом: «Товар - заказов / штук», в конце итого. */
@@ -2767,8 +2774,9 @@ function sobratPaket_() {
   paket.tekst = tekstStatistiki_(paket);
   paket.fotoBloby = imena.filter(function (k) { return foto[k]; }).map(function (k) {
     var f = foto[k];
-    return Utilities.newBlob(f.bytes, f.mime, k.replace(/[\\\/:*?"<>|]+/g, '_') + (f.mime === 'image/png' ? '.png' : '.jpg'));
+    return Utilities.newBlob(f.bytes, f.mime, latinitsa_(k) + (f.mime === 'image/png' ? '.png' : '.jpg'));
   });
+  paket.fotoImena = imena.filter(function (k) { return foto[k]; });
   paket.imya = 'TTN_' + den + '.pdf';
   return paket;
 }
@@ -2790,11 +2798,13 @@ function otpravitAlbom_(paket, nakleiki) {
   tgVyzov_('sendMessage', { text: tekst });
   for (var i = 0; i < bloby.length; i += 10) {
     var part = bloby.slice(i, i + 10);
-    if (part.length === 1) { tgOtpravitFail_(part[0], i === 0 ? podpis : ''); continue; }
+    if (part.length === 1) { tgOtpravitFail_(part[0], i === 0 ? podpis : (paket.fotoImena[i - nakleiki.length] || '')); continue; }
     var media = [], payload = {};
     part.forEach(function (b, k) {
       var m = { type: 'document', media: 'attach://f' + k };
-      if (k === 0 && i === 0) m.caption = podpis;
+      var nom = i + k;   // номер файла в общем списке: первым идёт PDF с наклейками
+      if (nom === 0) m.caption = podpis;
+      else if (paket.fotoImena[nom - nakleiki.length]) m.caption = paket.fotoImena[nom - nakleiki.length].slice(0, 1000);   // под каждым фото - название товара
       media.push(m);
       payload['f' + k] = b;
     });
